@@ -35,6 +35,7 @@ func FileUpload(db dbaccess.DbAccess, maxUploadSize int64, storageDir string) ht
 			return
 		}
 
+		// TODO: MaxBytesReader breaks connection instead of giving good response to the client
 		r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 		mpReader, err := r.MultipartReader()
 		if err != nil {
@@ -91,6 +92,7 @@ func FileUpload(db dbaccess.DbAccess, maxUploadSize int64, storageDir string) ht
 					if err != nil {
 						return err
 					}
+					defer file.Close()
 
 					_, err = io.Copy(file, part)
 					if err != nil {

@@ -1,6 +1,9 @@
 *.json
 *.txt
 *.rar
+*.db
+
+storage/
 
 # Binaries for programs and plugins
 *.exe
