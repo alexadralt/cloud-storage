@@ -15,17 +15,18 @@ const (
 )
 
 type AppConfig struct {
-	Environment string `json:"environment" env-default:"prod"`
-	DbPath      string `json:"db-path" env-required:"true"`
-	MaxUploadSize int64 `json:"max-upload-size" env-default:"1024"`
+	Environment     string `json:"environment" env-default:"prod"`
+	DbPath          string `json:"db-path" env-required:"true"`
+	MaxUploadSize   int64  `json:"max-upload-size" env-default:"1024"`
 	FileStoragePath string `json:"file-storage-path" env-required:"true"`
 	HTTPConfig
 }
 
 type HTTPConfig struct {
-	Address     string        `json:"address" env-default:"0.0.0.0:8080"`
-	Timeout     time.Duration `json:"timeout" env-default:"2s"`
-	IdleTimeout time.Duration `json:"idle-timeout" env-default:"30s"`
+	Address      string        `json:"address" env-default:"0.0.0.0:8080"`
+	WriteTimeout time.Duration `json:"write-timeout" env-default:"0s"`
+	IdleTimeout  time.Duration `json:"idle-timeout" env-default:"30s"`
+	ReadTimout   time.Duration `json:"read-timeout" env-default:"0s"`
 }
 
 const configPathEnvVarName = "CONFIG_PATH"

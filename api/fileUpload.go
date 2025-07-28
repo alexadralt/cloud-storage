@@ -38,8 +38,6 @@ func FileUpload(db dbaccess.DbAccess, maxUploadSize int64, storageDir string) ht
 			return
 		}
 
-		// TODO: something breaks connection sometimes
-		
 		r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 		mpReader, err := r.MultipartReader()
 		if err != nil {

@@ -46,15 +46,14 @@ func main() {
 		} else if !info.IsDir() {
 			return errors.New("file already exists with such name")
 		}
-		
+
 		return nil
 	}()
-	
+
 	if err != nil {
 		log.Error("Could not create storage dir", slogext.Error(err))
 		os.Exit(1)
 	}
-	
 
 	r := chi.NewRouter()
 
@@ -72,13 +71,20 @@ func main() {
 		slog.Int64("max-upload-size", appConfig.MaxUploadSize),
 	)
 
-	// TODO: understand timeouts
 	server := &http.Server{
 		Addr:         appConfig.Address,
 		IdleTimeout:  appConfig.IdleTimeout,
-		WriteTimeout: appConfig.Timeout,
+		WriteTimeout: appConfig.WriteTimeout,
+		ReadTimeout:  appConfig.ReadTimout,
 		Handler:      r,
 	}
+
+	log.Debug(
+		"Server timeouts",
+		slog.String("idle-timeout", server.IdleTimeout.String()),
+		slog.String("write-timeout", server.WriteTimeout.String()),
+		slog.String("read-timeout", server.ReadTimeout.String()),
+	)
 
 	log.Error("Server terminated", slog.String("server-crash", server.ListenAndServe().Error()))
 }
