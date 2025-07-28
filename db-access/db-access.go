@@ -13,4 +13,5 @@ func (err UniqueConstraintError) Error() string {
 
 type DbAccess interface {
 	AddFile(generatedName string, filename string) error
+	RemoveFile(generatedName string) error
 }

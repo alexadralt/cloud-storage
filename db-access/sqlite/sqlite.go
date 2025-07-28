@@ -32,6 +32,7 @@ func New(path string) (*SqliteDb, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	defer stmt.Close()
 
 	_, err = stmt.Exec()
 	if err != nil {
@@ -50,6 +51,7 @@ func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
+	defer stmt.Close()
 
 	_, err = stmt.Exec(generatedName, filename)
 	if err != nil {
@@ -62,5 +64,24 @@ func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
+	return nil
+}
+
+func (db *SqliteDb) RemoveFile(generatedName string) error {
+	const op = "db-access.sqlite.RemoveFile"
+	
+	stmt, err := db.Prepare(`
+	DELETE FROM files WHERE generatedName = ?
+	`)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+	
+	_, err = stmt.Exec(generatedName)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	
 	return nil
 }
