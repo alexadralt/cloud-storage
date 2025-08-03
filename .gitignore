@@ -1,9 +1,4 @@
-*.json
-*.txt
-*.rar
-*.db
-
-storage/
+runtime/
 
 # Binaries for programs and plugins
 *.exe
