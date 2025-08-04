@@ -4,12 +4,14 @@ import (
 	"cloud-storage/api"
 	"cloud-storage/config"
 	"cloud-storage/db-access/sqlite"
+	"cloud-storage/encryption"
 	slogext "cloud-storage/utils/slogExt"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -22,6 +24,8 @@ func main() {
 	)
 
 	log.Debug("Debug messages are enabled")
+	
+	log.Debug("dec-rotation-period", slog.String("value", time.Duration(appConfig.DecRotationPeriod).String()))
 
 	db, err := sqlite.New(appConfig.DbPath)
 	if err != nil {
@@ -54,6 +58,8 @@ func main() {
 		log.Error("Could not create storage dir", slogext.Error(err))
 		os.Exit(1)
 	}
+	
+	crypter := encryption.New_AES_GCM_Crypter(db, time.Duration(appConfig.DecRotationPeriod), appConfig.MaxUploadSize)
 
 	r := chi.NewRouter()
 
@@ -62,7 +68,7 @@ func main() {
 		r.Use(slogext.Logger(log))
 		r.Use(middleware.Recoverer)
 
-		r.Post("/upload", api.FileUpload(db, appConfig.MaxUploadSize, appConfig.FileStoragePath))
+		r.Post("/upload", api.FileUpload(db, appConfig.UploadConfig(), crypter))
 	})
 
 	log.Info(
@@ -73,9 +79,9 @@ func main() {
 
 	server := &http.Server{
 		Addr:         appConfig.Address,
-		IdleTimeout:  appConfig.IdleTimeout,
-		WriteTimeout: appConfig.WriteTimeout,
-		ReadTimeout:  appConfig.ReadTimout,
+		IdleTimeout:  time.Duration(appConfig.IdleTimeout),
+		WriteTimeout: time.Duration(appConfig.WriteTimeout),
+		ReadTimeout:  time.Duration(appConfig.ReadTimout),
 		Handler:      r,
 	}
 

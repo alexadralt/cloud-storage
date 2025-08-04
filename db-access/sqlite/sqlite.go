@@ -13,33 +13,60 @@ type SqliteDb struct {
 	*sql.DB
 }
 
+func (db *SqliteDb) Execute(query string, args ...any) error {
+	const op = "db-access.sqlite.Exec"
+
+	stmt, err := db.Prepare(query)
+
+	if err != nil {
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(args...)
+	if err != nil {
+		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
+	}
+
+	return nil
+}
+
 func New(path string) (*SqliteDb, error) {
 	const op = "db-access.sqlite.New"
 
-	db, err := sql.Open("sqlite3", path)
+	sqlite, err := sql.Open("sqlite3", path)
+	db := &SqliteDb{sqlite}
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("%s: sql.Open: %w", op, err)
 	}
 
-	stmt, err := db.Prepare(`
+	err = db.Execute(`
 	CREATE TABLE IF NOT EXISTS files(
 		id INTEGER PRIMARY KEY,
 		generatedName TEXT NOT NULL UNIQUE,
 		fileName TEXT NOT NULL
+	);`)
+	if err != nil {
+		return nil, fmt.Errorf("%s: create files table: %w", op, err)
+	}
+
+	err = db.Execute(`
+	CREATE TABLE IF NOT EXISTS decs(
+		id INTEGER PRIMARY KEY,
+		value TEXT NOT NULL,
+		creationTime INTEGER NOT NULL
 	);
-	CREATE INDEX IF NOT EXISTS idx_genName ON files(generatedName);
 	`)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("%s: create decs table: %w", op, err)
 	}
-	defer stmt.Close()
 
-	_, err = stmt.Exec()
+	err = db.Execute(`CREATE INDEX IF NOT EXISTS idx_genName ON files(generatedName);`)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("%s: create index on files: %w", op, err)
 	}
-
-	return &SqliteDb{db}, nil
+	
+	return db, nil
 }
 
 func (db *SqliteDb) AddFile(generatedName string, filename string) error {
@@ -49,7 +76,7 @@ func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 	INSERT INTO files(generatedName, fileName) values(?,?)
 	`)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
 	defer stmt.Close()
 
@@ -61,7 +88,7 @@ func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 			return dbaccess.UniqueConstraintError{Table: tableColumn[0], Column: tableColumn[1]}
 		}
 
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
 	}
 
 	return nil
@@ -69,19 +96,86 @@ func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 
 func (db *SqliteDb) RemoveFile(generatedName string) error {
 	const op = "db-access.sqlite.RemoveFile"
-	
+
 	stmt, err := db.Prepare(`
 	DELETE FROM files WHERE generatedName = ?
 	`)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
 	defer stmt.Close()
-	
+
 	_, err = stmt.Exec(generatedName)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
 	}
-	
+
+	return nil
+}
+
+func (db *SqliteDb) GetDEC(id dbaccess.DecId) (dbaccess.DEC, error) {
+	const op = "db-access.sqlite.GetDEC"
+
+	stmt, err := db.Prepare(`
+	SELECT * FROM decs WHERE id = ?
+	`)
+	if err != nil {
+		return dbaccess.DEC{}, fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+	defer stmt.Close()
+
+	var dec dbaccess.DEC
+	err = stmt.QueryRow(id).Scan(&dec.Id, &dec.Value, &dec.CreationTime)
+	if err != nil {
+		return dbaccess.DEC{}, fmt.Errorf("%s: stmt.QueryRow: %w", op, err)
+	}
+
+	return dec, nil
+}
+
+func (db *SqliteDb) GetNewestDEC() (dbaccess.DEC, error) {
+	const op = "db-access.sqlite.GetNewestDEC"
+
+	// TODO: speed of this sql query
+	stmt, err := db.Prepare(`
+	SELECT * FROM decs ORDER BY creationTime DESC LIMIT 1
+	`)
+	if err != nil {
+		return dbaccess.DEC{}, fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+	defer stmt.Close()
+
+	var dec dbaccess.DEC
+	err = stmt.QueryRow().Scan(&dec.Id, &dec.Value, &dec.CreationTime)
+	if err != nil {
+		return dbaccess.DEC{}, fmt.Errorf("%s: stmt.QueryRow: %w", op, err)
+	}
+
+	return dec, nil
+}
+
+func (db *SqliteDb) AddDEC(dec *dbaccess.DEC) error {
+	const op = "db-access.sqlite.AddDEC"
+
+	stmt, err := db.Prepare(`
+	INSERT INTO decs(value, creationTime) values(?,?)
+	`)
+	if err != nil {
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(dec.Value, dec.CreationTime)
+	if err != nil {
+		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("%s: res.LastInsertId: %w", op, err)
+	}
+
+	dec.Id = dbaccess.DecId(id)
+
 	return nil
 }

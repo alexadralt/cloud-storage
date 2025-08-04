@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cloud-storage/api"
 	"log"
 	"os"
 	"time"
@@ -14,19 +15,28 @@ const (
 	EnvDev   string = "dev"
 )
 
+type Duration time.Duration
+
+func (d *Duration) UnmarshalText(text []byte) error {
+	duration, err := time.ParseDuration(string(text))
+	*d = Duration(duration)
+	return err
+}
+
 type AppConfig struct {
-	Environment     string `json:"environment" env-default:"prod"`
-	DbPath          string `json:"db-path" env-required:"true"`
-	MaxUploadSize   int64  `json:"max-upload-size" env-default:"1024"`
-	FileStoragePath string `json:"file-storage-path" env-required:"true"`
+	Environment       string   `json:"environment" env-default:"prod"`
+	DbPath            string   `json:"db-path" env-required:"true"`
+	MaxUploadSize     int64    `json:"max-upload-size" env-default:"1024"`
+	FileStoragePath   string   `json:"file-storage-path" env-required:"true"`
+	DecRotationPeriod Duration `json:"dec-rotation-period" env-required:"true"`
 	HTTPConfig
 }
 
 type HTTPConfig struct {
-	Address      string        `json:"address" env-default:"0.0.0.0:8080"`
-	WriteTimeout time.Duration `json:"write-timeout" env-default:"0s"`
-	IdleTimeout  time.Duration `json:"idle-timeout" env-default:"30s"`
-	ReadTimout   time.Duration `json:"read-timeout" env-default:"0s"`
+	Address      string   `json:"address" env-default:"0.0.0.0:8080"`
+	WriteTimeout Duration `json:"write-timeout" env-default:"0s"`
+	IdleTimeout  Duration `json:"idle-timeout" env-default:"30s"`
+	ReadTimout   Duration `json:"read-timeout" env-default:"0s"`
 }
 
 const configPathEnvVarName = "CONFIG_PATH"
@@ -48,4 +58,11 @@ func MustLoad() *AppConfig {
 	}
 
 	return &appConfig
+}
+
+func (cfg *AppConfig) UploadConfig() api.UploadConfig {
+	return api.UploadConfig{
+		MaxUploadSize: cfg.MaxUploadSize,
+		StorageDir:    cfg.FileStoragePath,
+	}
 }

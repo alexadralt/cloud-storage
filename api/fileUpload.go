@@ -2,15 +2,17 @@ package api
 
 import (
 	dbaccess "cloud-storage/db-access"
+	"cloud-storage/encryption"
 	slogext "cloud-storage/utils/slogExt"
+	"encoding/binary"
 	"errors"
 	"io"
 	"log/slog"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -26,9 +28,38 @@ func isMultipartForm(r *http.Request) (bool, string) {
 	return err == nil && mediaType == "multipart/form-data", mediaType
 }
 
-func FileUpload(db dbaccess.DbAccess, maxUploadSize int64, storageDir string) http.HandlerFunc {
+type UploadConfig struct {
+	MaxUploadSize int64
+	StorageDir    string
+}
+
+func readNextPart(w http.ResponseWriter, mpReader *multipart.Reader, log *slog.Logger) *multipart.Part {
+	part, err := mpReader.NextPart()
+
+	mbe := &http.MaxBytesError{}
+	if errors.As(err, &mbe) {
+		errorMsg := "Multipart content exceeds max upload size"
+		log.Error(errorMsg)
+		http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+		return nil
+	}
+
+	if err != nil {
+		errorMsg := "Invalid multipart form"
+		log.Error(errorMsg, slogext.Error(err))
+		http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+		return nil
+	}
+	
+	return part
+}
+
+func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) http.HandlerFunc {
+	maxUploadSize := cfg.MaxUploadSize
+	storageDir := cfg.StorageDir
+
 	return func(w http.ResponseWriter, r *http.Request) {
-		op := "api.FileUpload"
+		const op = "api.FileUpload"
 		log := slogext.LogWithOp(op, r.Context())
 
 		if ok, mediaType := isMultipartForm(r); !ok {
@@ -47,152 +78,129 @@ func FileUpload(db dbaccess.DbAccess, maxUploadSize int64, storageDir string) ht
 			return
 		}
 
-		var nextFileSize int64 = -1
+		// read nextFileSize
+		part := readNextPart(w, mpReader, log)
+		if part == nil {
+			return
+		}
+		
+		var fileSize int64
 
+		if part.FormName() == "file-size" {
+			value := make([]byte, 8)
+
+			n, err := part.Read(value)
+			if errors.Is(err, io.EOF) && n > 0 {
+				// do nothing
+			} else if err != nil {
+				log.Error("Could not read file-size", slogext.Error(err))
+				http.Error(w, "Invalid file-size", http.StatusUnprocessableEntity)
+				return
+			}
+
+			fileSize = int64(binary.LittleEndian.Uint64(value))
+			log.Debug("Read file-size", slog.Int64("value", fileSize))
+
+			if fileSize > maxUploadSize || fileSize <= 0 {
+				errorMsg := "file-size is not in valid range"
+				log.Error(errorMsg, slog.Int64("file-size", fileSize), slog.Int64("max-upload-size", maxUploadSize))
+				http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+				return
+			}
+		} else {
+			errorMsg := "file-size is not provided"
+			log.Error(errorMsg)
+			http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+			return
+		}
+
+		// read an actual file after reading nextFileSize
+		part = readNextPart(w, mpReader, log)
+		if part == nil {
+			return
+		}
+		
+		filename := part.FileName()
+		if filename == "" {
+			errorMsg := "Expected file but found different form part"
+			log.Error(errorMsg)
+			http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+			return
+		}
+
+		// this loop regenerates uuid in case of duplicate
 		for {
-			part, err := mpReader.NextPart()
-			if err == io.EOF {
-				break
+			id := uuid.New()
+			strId := id.String()
+			if strId == "" {
+				panic("Invalid uuid generated")
 			}
-			
-			mbe := &http.MaxBytesError{}
-			if errors.As(err, &mbe) {
-				errorMsg := "Multipart content exceeds max upload size"
-				log.Error(errorMsg, slog.Int64("max-upload-size", maxUploadSize))
-				http.Error(w, errorMsg, http.StatusUnprocessableEntity)
-				return
-			}
-			
+
+			err := db.AddFile(strId, filename)
 			if err != nil {
-				errorMsg := "Invalid multipart form"
-				log.Error(errorMsg, slogext.Error(err))
-				http.Error(w, errorMsg, http.StatusUnprocessableEntity)
-				return
-			}
-
-			// read nextFileSize if haven't already
-			if nextFileSize < 0 {
-				if part.FormName() == "next-file-size" {
-					value := make([]byte, 18)
-
-					read, err := part.Read(value)
-
-					if err != io.EOF && err != nil {
-						log.Error("Could not read next-file-size", slogext.Error(err))
-						http.Error(w, "Invalid next-file-size", http.StatusUnprocessableEntity)
-						return
-					}
-
-					nextFileSize, err = strconv.ParseInt(string(value[:read]), 10, 64)
-					if err != nil {
-						log.Error("Could not read next-file-size", slogext.Error(err))
-						http.Error(w, "Invalid next-file-size", http.StatusUnprocessableEntity)
-						return
-					}
-					log.Debug("Read next-file-size", slog.Int64("value", nextFileSize))
-
-					if nextFileSize > maxUploadSize || nextFileSize < 0 {
-						errorMsg := "next-file-size is not in valid range"
-						log.Error(errorMsg, slog.Int64("next-file-size", nextFileSize), slog.Int64("max-upload-size", maxUploadSize))
-						http.Error(w, errorMsg, http.StatusUnprocessableEntity)
-						return
-					}
+				if uce, ok := err.(dbaccess.UniqueConstraintError); ok && uce.Column == "generatedName" {
+					continue
 				} else {
-					errorMsg := "next-file-size is not provided"
-					log.Error(errorMsg)
-					http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+					log.Error("Could not save file info to a db", slogext.Error(err))
+					http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 					return
 				}
-				
-				// we got nextFileSize and going to read next part
-				continue
 			}
 
-			// read an actual file after reading nextFileSize
-			filename := part.FileName()
-			if filename == "" {
-				errorMsg := "Expected file but found different form part"
-				log.Error(errorMsg)
-				http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+			path := strings.Join([]string{storageDir, strId}, "/")
+			err = func() error {
+				path, err = filepath.Abs(path)
+				if err != nil {
+					return err
+				}
+
+				file, err := os.Create(path)
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+
+				lr := newLimitedReader(part, fileSize)
+				err = c.EncryptAndCopy(file, lr, r.Context())
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}()
+
+			if err != nil {
+				log.Error("Could not save file to disk", slogext.Error(err))
+				var tbfe tooBigFileError
+				if errors.As(err, &tbfe) {
+					http.Error(w, tbfe.Error(), http.StatusUnprocessableEntity)
+				} else {
+					http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+				}
+
+				err := db.RemoveFile(strId)
+				if err != nil {
+					log.Error(
+						"Could not remove incomplete file info from db",
+						slogext.Error(err),
+						slog.String("generated-name", strId),
+					)
+				}
+
+				err = os.Remove(path)
+				if err != nil {
+					log.Error(
+						"Could not remove incomplete file from disk",
+						slogext.Error(err),
+						slog.String("generated-name", strId),
+					)
+				}
+
 				return
 			}
 
-			// this loop regenerates uuid in case of duplicate
-			for {
-				id := uuid.New()
-				strId := id.String()
-				if strId == "" {
-					panic("Invalid uuid generated")
-				}
-
-				err := db.AddFile(strId, filename)
-				if err != nil {
-					if uce, ok := err.(dbaccess.UniqueConstraintError); ok && uce.Column == "generatedName" {
-						continue
-					} else {
-						log.Error("Could not save file info to a db", slogext.Error(err))
-						http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
-						return
-					}
-				}
-
-				path := strings.Join([]string{storageDir, strId}, "/")
-				err = func() error {
-					path, err = filepath.Abs(path)
-					if err != nil {
-						return err
-					}
-
-					file, err := os.Create(path)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-
-					lr := newLimitedReader(part, nextFileSize)
-					_, err = io.Copy(file, lr)
-					if err != nil {
-						return err
-					}
-
-					return nil
-				}()
-				
-				if err != nil {
-					log.Error("Could not save file to disk", slogext.Error(err))
-					if tbfe, ok := err.(tooBigFileError); ok {
-						http.Error(w, tbfe.Error(), http.StatusUnprocessableEntity)
-					} else {
-						http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
-					}
-					
-					err := db.RemoveFile(strId)
-					if err != nil {
-						log.Error(
-							"Could not remove incomplete file info from db",
-							slogext.Error(err),
-							slog.String("generated-name", strId),
-						)
-					}
-					
-					err = os.Remove(path)
-					if err != nil {
-						log.Error(
-							"Could not remove incomplete file from disk",
-							slogext.Error(err),
-							slog.String("generated-name", strId),
-						)
-					}
-					
-					return
-				}
-				
-				// reset nextFileSize so we request it for the next file (if there is one)
-				nextFileSize = -1
-
-				// we're done saving file and going to read next part
-				break
-			}
+			// we're done saving file
+			break
 		}
 
 		w.WriteHeader(http.StatusCreated)
@@ -200,26 +208,26 @@ func FileUpload(db dbaccess.DbAccess, maxUploadSize int64, storageDir string) ht
 }
 
 type limitedReader struct {
-	reader io.Reader
+	reader  io.Reader
 	remaing int64
 }
 
 func newLimitedReader(reader io.Reader, limit int64) *limitedReader {
 	return &limitedReader{
-		reader: reader,
+		reader:  reader,
 		remaing: limit,
 	}
 }
 
-func (l *limitedReader) Read(p []byte) (n int, err error) {
-	if l.remaing <= 0 {
+func (lr *limitedReader) Read(p []byte) (n int, err error) {
+	if lr.remaing <= 0 {
 		return 0, tooBigFileError{}
 	}
-	if int64(len(p)) > l.remaing {
-		p = p[0:l.remaing]
+	if int64(len(p)) > lr.remaing {
+		p = p[0:lr.remaing]
 	}
-	n, err = l.reader.Read(p)
-	l.remaing -= int64(n)
+	n, err = lr.reader.Read(p)
+	lr.remaing -= int64(n)
 	return
 }
 
