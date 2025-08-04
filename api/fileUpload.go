@@ -50,7 +50,7 @@ func readNextPart(w http.ResponseWriter, mpReader *multipart.Reader, log *slog.L
 		http.Error(w, errorMsg, http.StatusUnprocessableEntity)
 		return nil
 	}
-	
+
 	return part
 }
 
@@ -78,12 +78,12 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 			return
 		}
 
-		// read nextFileSize
+		// read fileSize
 		part := readNextPart(w, mpReader, log)
 		if part == nil {
 			return
 		}
-		
+
 		var fileSize int64
 
 		if part.FormName() == "file-size" {
@@ -114,17 +114,25 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 			return
 		}
 
-		// read an actual file after reading nextFileSize
+		// read an actual file after reading fileSize
 		part = readNextPart(w, mpReader, log)
 		if part == nil {
 			return
 		}
-		
+
+		//TODO: check if file name is too long cause we dont want that to cause problems
 		filename := part.FileName()
 		if filename == "" {
 			errorMsg := "Expected file but found different form part"
 			log.Error(errorMsg)
 			http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+			return
+		}
+
+		encFileName, err := c.EncryptFileName(filename)
+		if err != nil {
+			log.Error("Could not encrypt file name", slogext.Error(err))
+			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -136,9 +144,10 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 				panic("Invalid uuid generated")
 			}
 
-			err := db.AddFile(strId, filename)
+			err = db.AddFile(strId, encFileName)
 			if err != nil {
-				if uce, ok := err.(dbaccess.UniqueConstraintError); ok && uce.Column == "generatedName" {
+				var uce dbaccess.UniqueConstraintError
+				if errors.As(err, &uce) && uce.Column == "generatedName" {
 					continue
 				} else {
 					log.Error("Could not save file info to a db", slogext.Error(err))

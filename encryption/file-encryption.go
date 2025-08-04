@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -25,6 +24,7 @@ import (
 
 type Crypter interface {
 	EncryptAndCopy(w io.Writer, r io.Reader, ctx context.Context) error
+	EncryptFileName(filename string) (string, error)
 }
 
 type AES_GCM_Crypter struct {
@@ -91,6 +91,45 @@ func New_AES_GCM_Crypter(db dbaccess.DbAccess, decRotationPeriod time.Duration, 
 	}
 }
 
+func getBodyForTransitEncryptionRequest(plaintext []byte) (string, error) {
+	const op = "encryption.AES_GCM_Crypter.getBodyForTransitEncryptionRequest"
+	
+	buf := bytes.NewBuffer(make([]byte, 0))
+	encoder := base64.NewEncoder(base64.StdEncoding, buf)
+
+	_, err := encoder.Write(plaintext)
+	if err != nil {
+		return "", fmt.Errorf("%s: encoder.Write: %w", op, err)
+	}
+	
+	encoder.Close()
+
+	body := fmt.Sprintf(`
+	{
+		"plaintext":"%s"
+	}
+	`, buf.String())
+	
+	return body, nil
+}
+
+func (c *AES_GCM_Crypter) EncryptFileName(filename string) (string, error) {
+	const op = "encryption.AES_GCM_Crypter.EncryptFileName"
+
+	body, err := getBodyForTransitEncryptionRequest([]byte(filename))
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	var vaultResp VaultResponse[EncryptData]
+	err = vaultTransitRequest(c, encrypt, body, &vaultResp)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	return vaultResp.Data.Ciphertext, nil
+}
+
 const aesKeySize = 32
 
 func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader, ctx context.Context) error {
@@ -106,11 +145,8 @@ func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader, ctx context.C
 	var key []byte
 
 	dec, err := c.db.GetNewestDEC()
-	if err != nil || time.Since(time.Time(dec.CreationTime)) > c.decRotationPeriod {
-		// TODO: we should generate new key only when either no decs was created yet or when rotation period has passed;
-		// other errors should be returned to the caller instead
-		log.Debug("error when GetNewestDEC()", slogext.Error(err))
-
+	var nre dbaccess.NoRowsError
+	if errors.As(err, &nre) || time.Since(time.Time(dec.CreationTime)) > c.decRotationPeriod {
 		// generate new key
 
 		key = make([]byte, aesKeySize)
@@ -119,22 +155,13 @@ func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader, ctx context.C
 			return fmt.Errorf("%s: rand.Reader.Read: %w", op, err)
 		}
 
-		buf := bytes.NewBuffer(make([]byte, 0))
-		encoder := base64.NewEncoder(base64.StdEncoding, buf)
-		_, err = encoder.Write(key)
+		body, err := getBodyForTransitEncryptionRequest(key)
 		if err != nil {
-			return fmt.Errorf("%s: encrypt: encoder.Write: %w", op, err)
+			return fmt.Errorf("%s: %w", op, err)
 		}
-		encoder.Close()
-
-		body := fmt.Sprintf(`
-		{
-			"plaintext":"%s"
-		}
-		`, buf.String())
 
 		var vaultResp VaultResponse[EncryptData]
-		err = vaultTransitRequest(c, encrypt, body, &vaultResp, log)
+		err = vaultTransitRequest(c, encrypt, body, &vaultResp)
 		if err != nil {
 			return fmt.Errorf("%s: encrypt: %w", op, err)
 		}
@@ -147,6 +174,8 @@ func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader, ctx context.C
 		}
 
 		log.Debug("Issued a new DEC")
+	} else if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	if key == nil {
@@ -159,11 +188,11 @@ func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader, ctx context.C
 		`, dec.Value)
 
 		var vaultResponse VaultResponse[DecryptData]
-		err := vaultTransitRequest(c, decrypt, body, &vaultResponse, log)
+		err := vaultTransitRequest(c, decrypt, body, &vaultResponse)
 		if err != nil {
 			return fmt.Errorf("%s: decrypt: %w", op, err)
 		}
-		
+
 		decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewReader([]byte(vaultResponse.Data.Plaintext)))
 		key = make([]byte, aesKeySize)
 		_, err = decoder.Read(key)
@@ -190,7 +219,7 @@ func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader, ctx context.C
 		return fmt.Errorf("%s: rand.Read: %w", op, err)
 	}
 
-	// TODO: Memory/Speed: maybe encrypt data in smaller chunks and/or use a buffer pool
+	// TODO: Memory/Speed: maybe encrypt data in smaller chunks and/or use a buffer pool or arena
 	data := make([]byte, c.uploadSize)
 	n, err := io.ReadFull(r, data)
 	if errors.Is(err, io.ErrUnexpectedEOF) {
@@ -235,14 +264,12 @@ const (
 	decrypt transitAction = "decrypt"
 )
 
-func vaultTransitRequest[T any](c *AES_GCM_Crypter, action transitAction, body string, vaultResp *VaultResponse[T], log *slog.Logger) error {
+func vaultTransitRequest[T any](c *AES_GCM_Crypter, action transitAction, body string, vaultResp *VaultResponse[T]) error {
 	const op = "encryption.AES_GCM_Crypter.vaultTransitRequest"
 
-	url := fmt.Sprintf("%s/v1/%s/%s/%s", c.vaultAddress, c.keyStorage, string(action), c.keyName)
-	log.Debug("accesing vault", slog.String("url", url), slog.String("key-storage", c.keyStorage), slog.String("key-name", c.keyName))
 	r, err := http.NewRequest(
 		"POST",
-		url,
+		fmt.Sprintf("%s/v1/%s/%s/%s", c.vaultAddress, c.keyStorage, string(action), c.keyName),
 		bytes.NewReader([]byte(body)),
 	)
 	if err != nil {

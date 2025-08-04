@@ -3,6 +3,7 @@ package sqlite
 import (
 	dbaccess "cloud-storage/db-access"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,34 +14,35 @@ type SqliteDb struct {
 	*sql.DB
 }
 
-func (db *SqliteDb) Execute(query string, args ...any) error {
+// TODO: maybe we should just use db.Exec() instead of this function
+func (db *SqliteDb) Execute(query string, args ...any) (sql.Result, error) {
 	const op = "db-access.sqlite.Exec"
 
 	stmt, err := db.Prepare(query)
-
 	if err != nil {
-		return fmt.Errorf("%s: prepare statement: %w", op, err)
+		return nil, fmt.Errorf("%s: db.Prepare: %w", op, err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(args...)
+	res, err := stmt.Exec(args...)
 	if err != nil {
-		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
+		return nil, fmt.Errorf("%s: stmt.Exec: %w", op, err)
 	}
 
-	return nil
+	return res, nil
 }
 
 func New(path string) (*SqliteDb, error) {
 	const op = "db-access.sqlite.New"
 
 	sqlite, err := sql.Open("sqlite3", path)
-	db := &SqliteDb{sqlite}
 	if err != nil {
 		return nil, fmt.Errorf("%s: sql.Open: %w", op, err)
 	}
+	
+	db := &SqliteDb{sqlite}
 
-	err = db.Execute(`
+	_, err = db.Execute(`
 	CREATE TABLE IF NOT EXISTS files(
 		id INTEGER PRIMARY KEY,
 		generatedName TEXT NOT NULL UNIQUE,
@@ -50,7 +52,7 @@ func New(path string) (*SqliteDb, error) {
 		return nil, fmt.Errorf("%s: create files table: %w", op, err)
 	}
 
-	err = db.Execute(`
+	_, err = db.Execute(`
 	CREATE TABLE IF NOT EXISTS decs(
 		id INTEGER PRIMARY KEY,
 		value TEXT NOT NULL,
@@ -61,7 +63,7 @@ func New(path string) (*SqliteDb, error) {
 		return nil, fmt.Errorf("%s: create decs table: %w", op, err)
 	}
 
-	err = db.Execute(`CREATE INDEX IF NOT EXISTS idx_genName ON files(generatedName);`)
+	_, err = db.Execute(`CREATE INDEX IF NOT EXISTS idx_genName ON files(generatedName);`)
 	if err != nil {
 		return nil, fmt.Errorf("%s: create index on files: %w", op, err)
 	}
@@ -72,23 +74,21 @@ func New(path string) (*SqliteDb, error) {
 func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 	const op = "db-access.sqlite.AddFile"
 
-	stmt, err := db.Prepare(`
-	INSERT INTO files(generatedName, fileName) values(?,?)
-	`)
+	_, err := db.Execute(
+		`INSERT INTO files(generatedName, fileName) values(?,?)`,
+		generatedName,
+		filename,
+	)
 	if err != nil {
-		return fmt.Errorf("%s: prepare statement: %w", op, err)
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(generatedName, filename)
-	if err != nil {
-		if sqliteErr, ok := err.(sqlite3.Error); ok && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			// TODO: this is really dumb. Like wtf why are we getting table and column names from debug error string representation?
 			errorMsg, _ := strings.CutPrefix(sqliteErr.Error(), "UNIQUE constraint failed: ")
 			tableColumn := strings.Split(errorMsg, ".")
 			return dbaccess.UniqueConstraintError{Table: tableColumn[0], Column: tableColumn[1]}
 		}
 
-		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
@@ -97,17 +97,12 @@ func (db *SqliteDb) AddFile(generatedName string, filename string) error {
 func (db *SqliteDb) RemoveFile(generatedName string) error {
 	const op = "db-access.sqlite.RemoveFile"
 
-	stmt, err := db.Prepare(`
-	DELETE FROM files WHERE generatedName = ?
-	`)
+	_, err := db.Execute(
+		`DELETE FROM files WHERE generatedName = ?`,
+		generatedName,
+	)
 	if err != nil {
-		return fmt.Errorf("%s: prepare statement: %w", op, err)
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(generatedName)
-	if err != nil {
-		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
@@ -137,9 +132,7 @@ func (db *SqliteDb) GetNewestDEC() (dbaccess.DEC, error) {
 	const op = "db-access.sqlite.GetNewestDEC"
 
 	// TODO: speed of this sql query
-	stmt, err := db.Prepare(`
-	SELECT * FROM decs ORDER BY creationTime DESC LIMIT 1
-	`)
+	stmt, err := db.Prepare(`SELECT * FROM decs ORDER BY creationTime DESC LIMIT 1`)
 	if err != nil {
 		return dbaccess.DEC{}, fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
@@ -147,7 +140,9 @@ func (db *SqliteDb) GetNewestDEC() (dbaccess.DEC, error) {
 
 	var dec dbaccess.DEC
 	err = stmt.QueryRow().Scan(&dec.Id, &dec.Value, &dec.CreationTime)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
+		return dbaccess.DEC{}, dbaccess.NoRowsError{Table: "decs"}
+	} else if err != nil {
 		return dbaccess.DEC{}, fmt.Errorf("%s: stmt.QueryRow: %w", op, err)
 	}
 
@@ -157,17 +152,13 @@ func (db *SqliteDb) GetNewestDEC() (dbaccess.DEC, error) {
 func (db *SqliteDb) AddDEC(dec *dbaccess.DEC) error {
 	const op = "db-access.sqlite.AddDEC"
 
-	stmt, err := db.Prepare(`
-	INSERT INTO decs(value, creationTime) values(?,?)
-	`)
+	res, err := db.Execute(
+		`INSERT INTO decs(value, creationTime) values(?,?)`,
+		dec.Value,
+		dec.CreationTime,
+	)
 	if err != nil {
-		return fmt.Errorf("%s: prepare statement: %w", op, err)
-	}
-	defer stmt.Close()
-
-	res, err := stmt.Exec(dec.Value, dec.CreationTime)
-	if err != nil {
-		return fmt.Errorf("%s: stmt.Exec: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	id, err := res.LastInsertId()

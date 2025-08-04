@@ -16,6 +16,14 @@ func (err UniqueConstraintError) Error() string {
 	return strings.Join([]string{"unique constraint violation: ", err.Table, ".", err.Column}, "")
 }
 
+type NoRowsError struct {
+	Table string
+}
+
+func (err NoRowsError) Error() string {
+	return fmt.Sprintf("no rows were found in table %s", err.Table)
+}
+
 type Time time.Time
 
 func (t Time) Value() (driver.Value, error) {
