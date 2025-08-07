@@ -6,6 +6,7 @@ import (
 	"cloud-storage/db-access/sqlite"
 	"cloud-storage/encryption"
 	slogext "cloud-storage/utils/slogExt"
+	"crypto/rand"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -59,7 +60,14 @@ func main() {
 		os.Exit(1)
 	}
 	
-	crypter := encryption.New_AES_GCM_Crypter(db, time.Duration(appConfig.DecRotationPeriod), appConfig.MaxUploadSize)
+	encryptionService := encryption.NewVault()
+	fileCrypter := encryption.New_AES_GCM_Crypter(
+		db,
+		encryptionService,
+		rand.Reader,
+		time.Duration(appConfig.DecRotationPeriod),
+		appConfig.MaxUploadSize,
+	)
 
 	r := chi.NewRouter()
 
@@ -68,7 +76,7 @@ func main() {
 		r.Use(slogext.Logger(log))
 		r.Use(middleware.Recoverer)
 
-		r.Post("/upload", api.FileUpload(db, appConfig.UploadConfig(), crypter))
+		r.Post("/upload", api.FileUpload(db, appConfig.UploadConfig(), fileCrypter))
 	})
 
 	log.Info(

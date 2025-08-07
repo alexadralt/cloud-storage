@@ -170,7 +170,7 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 				defer file.Close()
 
 				lr := newLimitedReader(part, fileSize)
-				err = c.EncryptAndCopy(file, lr, r.Context())
+				err = c.EncryptAndCopy(file, lr)
 				if err != nil {
 					return err
 				}
