@@ -1,7 +1,7 @@
 package encryption
 
 import (
-	dbaccess "cloud-storage/db-access"
+	dbaccess "cloud-storage/db_access"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"

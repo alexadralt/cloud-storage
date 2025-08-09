@@ -3,7 +3,7 @@ package main
 import (
 	"cloud-storage/api"
 	"cloud-storage/config"
-	"cloud-storage/db-access/sqlite"
+	"cloud-storage/db_access/sqlite"
 	"cloud-storage/encryption"
 	slogext "cloud-storage/utils/slogExt"
 	"crypto/rand"

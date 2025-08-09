@@ -1,7 +1,7 @@
 package api
 
 import (
-	dbaccess "cloud-storage/db-access"
+	dbaccess "cloud-storage/db_access"
 	"cloud-storage/encryption"
 	slogext "cloud-storage/utils/slogExt"
 	"encoding/binary"

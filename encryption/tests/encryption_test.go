@@ -2,8 +2,8 @@ package encryption_test
 
 import (
 	"bytes"
-	dbaccess "cloud-storage/db-access"
-	db_access_mocks "cloud-storage/db-access/mocks"
+	dbaccess "cloud-storage/db_access"
+	db_access_mocks "cloud-storage/db_access/mocks"
 	"cloud-storage/encryption"
 	encryption_mocks "cloud-storage/encryption/mocks"
 	"encoding/binary"
@@ -174,22 +174,22 @@ func assertEncryption(
 	plaintext := []byte("test plaintext")
 	r := bytes.NewReader(plaintext)
 	w := bytes.NewBuffer(make([]byte, 0))
-	
+
 	expectedCiphertext := []byte("test ciphertext")
 	expectedNonce := make([]byte, nonceSize)
 	fillWithNonce(expectedNonce)
 
 	sep.EXPECT().Encrypt(r, expectedKey, rs).Return(expectedCiphertext, expectedNonce, nil).Once()
 	assert.NoError(t, crypter.EncryptAndCopy(w, r))
-	
+
 	data := w.Bytes()
 	keyId := data[:8]
 	assert.Equal(t, expectedKeyId, int64(binary.LittleEndian.Uint64(keyId)))
-	
+
 	nonce := data[8:][:nonceSize]
 	assert.Equal(t, expectedNonce, nonce)
-	
-	ciphertext := data[8 + nonceSize:]
+
+	ciphertext := data[8+nonceSize:]
 	assert.Equal(t, expectedCiphertext, ciphertext)
 }
 

@@ -1,7 +1,7 @@
 package sqlite
 
 import (
-	dbaccess "cloud-storage/db-access"
+	dbaccess "cloud-storage/db_access"
 	"database/sql"
 	"errors"
 	"fmt"

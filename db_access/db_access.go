@@ -1,4 +1,4 @@
-package dbaccess
+package db_access
 
 import (
 	"database/sql/driver"

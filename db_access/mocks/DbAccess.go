@@ -3,7 +3,7 @@
 package db_access_mocks
 
 import (
-	dbaccess "cloud-storage/db-access"
+	dbaccess "cloud-storage/db_access"
 
 	mock "github.com/stretchr/testify/mock"
 )
