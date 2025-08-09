@@ -16,34 +16,78 @@ type Crypter interface {
 	EncryptFileName(filename string) (string, error)
 }
 
-type RandomSource io.Reader
-
-type AES_GCM_Crypter struct {
-	db dbaccess.DbAccess
-	es EncryptionService
-	rs RandomSource
-
-	decRotationPeriod time.Duration
-	uploadSize        int64
+type SymmetricEncryptionProvider interface {
+	Encrypt(r io.Reader, key []byte, rs RandomSource) (ciphertext []byte, nonce []byte, err error)
 }
 
-func New_AES_GCM_Crypter(
-	db dbaccess.DbAccess,
-	es EncryptionService,
-	rs RandomSource,
-	decRotationPeriod time.Duration,
-	uploadSize int64,
-) *AES_GCM_Crypter {
-	return &AES_GCM_Crypter{
-		db:                db,
-		es:                es,
-		rs:                rs,
-		decRotationPeriod: decRotationPeriod,
-		uploadSize:        uploadSize,
+type RandomSource io.Reader
+
+type AesGcmProvider struct {
+	maxFileSize int64
+}
+
+func NewAesGcmProvider(maxFileSize int64) AesGcmProvider {
+	return AesGcmProvider{
+		maxFileSize: maxFileSize,
 	}
 }
 
-func (c *AES_GCM_Crypter) EncryptFileName(filename string) (string, error) {
+func (p AesGcmProvider) Encrypt(r io.Reader, key []byte, rs RandomSource) ([]byte, []byte, error) {
+	const op = "encryption.AesGcmProvider.Encrypt"
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: aes.NewCipher: %w", op, err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: cipher.NewGCM: %w", op, err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	_, err = rs.Read(nonce)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: rs.Read: %w", op, err)
+	}
+
+	data := make([]byte, p.maxFileSize)
+	n, err := io.ReadFull(r, data)
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		// do nothing
+	} else if err != nil {
+		return nil, nil, fmt.Errorf("%s: buf.ReadFrom: %w", op, err)
+	}
+
+	return gcm.Seal(data[:0], nonce, data[:n], nil), nonce, nil
+}
+
+type SymmetricCrypter struct {
+	db  dbaccess.DbAccess
+	es  EncryptionService
+	rs  RandomSource
+	sep SymmetricEncryptionProvider
+
+	decRotationPeriod time.Duration
+}
+
+func NewSymmetricCrypter(
+	db dbaccess.DbAccess,
+	es EncryptionService,
+	rs RandomSource,
+	sep SymmetricEncryptionProvider,
+	decRotationPeriod time.Duration,
+) *SymmetricCrypter {
+	return &SymmetricCrypter{
+		db:                db,
+		es:                es,
+		rs:                rs,
+		sep:               sep,
+		decRotationPeriod: decRotationPeriod,
+	}
+}
+
+func (c *SymmetricCrypter) EncryptFileName(filename string) (string, error) {
 	const op = "encryption.AES_GCM_Crypter.EncryptFileName"
 
 	response, err := c.es.MakeEncryptRequest([]byte(filename))
@@ -56,7 +100,7 @@ func (c *AES_GCM_Crypter) EncryptFileName(filename string) (string, error) {
 
 const aesKeySize = 32
 
-func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
+func (c *SymmetricCrypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
 	const op = "encryption.AES_GCM_Crypter.EncryptAndCopy"
 
 	var key []byte
@@ -100,31 +144,11 @@ func (c *AES_GCM_Crypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
 
 	// ecnrypt the data
 
-	block, err := aes.NewCipher(key)
+	ciphertext, nonce, err := c.sep.Encrypt(r, key, c.rs)
 	if err != nil {
-		return fmt.Errorf("%s: aes.NewCipher: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return fmt.Errorf("%s: cipher.NewGCM: %w", op, err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	_, err = c.rs.Read(nonce)
-	if err != nil {
-		return fmt.Errorf("%s: c.rs.Read: %w", op, err)
-	}
-
-	data := make([]byte, c.uploadSize)
-	n, err := io.ReadFull(r, data)
-	if errors.Is(err, io.ErrUnexpectedEOF) {
-		// do nothing
-	} else if err != nil {
-		return fmt.Errorf("%s: io.ReadFull: %w", op, err)
-	}
-
-	ciphertext := gcm.Seal(data[:0], nonce, data[:n], nil)
 	// TODO: check if compiler actually optimizes this function away
 	err = func() error {
 		id := make([]byte, 8)

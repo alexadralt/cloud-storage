@@ -25,7 +25,7 @@ func main() {
 	)
 
 	log.Debug("Debug messages are enabled")
-	
+
 	log.Debug("dec-rotation-period", slog.String("value", time.Duration(appConfig.DecRotationPeriod).String()))
 
 	db, err := sqlite.New(appConfig.DbPath)
@@ -59,14 +59,14 @@ func main() {
 		log.Error("Could not create storage dir", slogext.Error(err))
 		os.Exit(1)
 	}
-	
+
 	encryptionService := encryption.NewVault()
-	fileCrypter := encryption.New_AES_GCM_Crypter(
+	fileCrypter := encryption.NewSymmetricCrypter(
 		db,
 		encryptionService,
 		rand.Reader,
+		encryption.NewAesGcmProvider(appConfig.MaxUploadSize),
 		time.Duration(appConfig.DecRotationPeriod),
-		appConfig.MaxUploadSize,
 	)
 
 	r := chi.NewRouter()

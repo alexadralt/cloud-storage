@@ -6,6 +6,7 @@ import (
 	db_access_mocks "cloud-storage/db-access/mocks"
 	"cloud-storage/encryption"
 	encryption_mocks "cloud-storage/encryption/mocks"
+	"encoding/binary"
 	"encoding/hex"
 	"slices"
 	"testing"
@@ -16,14 +17,15 @@ import (
 )
 
 const defaultKeyRotationPeriod = "1h"
-const defaultUploadSize = 1024
 const defaultKey = "6368616e676520746869732070617373776f726420746f206120736563726574"
 const nonceSize = 12
 const aesKeySize = 32
 
+const firstKeyId = 2
+const newKeyId = 5
+
 func TestEncryptAndCopy_AES_GCM(t *testing.T) {
-	// only testing interactions with db and encryption service
-	// not testing encryption itself
+	// testing cases when no key rotation happens
 
 	cases := []struct {
 		name string
@@ -53,7 +55,8 @@ func TestEncryptAndCopy_AES_GCM(t *testing.T) {
 
 			db := db_access_mocks.NewDbAccess(t)
 			es := encryption_mocks.NewEncryptionService(t)
-			rs := newRandomSource(t)
+			rs := encryption_mocks.NewRandomSource(t)
+			sep := encryption_mocks.NewSymmetricEncryptionProvider(t)
 
 			encryptedKey := "encrypted:" + string(key)
 
@@ -62,13 +65,8 @@ func TestEncryptAndCopy_AES_GCM(t *testing.T) {
 			d, err := time.ParseDuration(defaultKeyRotationPeriod)
 			assert.NoError(t, err)
 
-			crypter := encryption.New_AES_GCM_Crypter(db, es, rs, d, defaultUploadSize)
-
-			plaintext := []byte("test plaintext")
-			r := bytes.NewReader(plaintext)
-			w := bytes.NewBuffer(make([]byte, 0))
-
-			assert.NoError(t, crypter.EncryptAndCopy(w, r))
+			crypter := encryption.NewSymmetricCrypter(db, es, rs, sep, d)
+			assertEncryption(t, firstKeyId, key, crypter, rs, sep)
 		})
 	}
 }
@@ -84,7 +82,8 @@ func TestEncryptAndCopy_AES_GCM_KeyRotation(t *testing.T) {
 
 	db := db_access_mocks.NewDbAccess(t)
 	es := encryption_mocks.NewEncryptionService(t)
-	rs := newRandomSource(t)
+	rs := encryption_mocks.NewRandomSource(t)
+	sep := encryption_mocks.NewSymmetricEncryptionProvider(t)
 
 	encryptedOldKey := "encrypted:" + string(oldKey)
 	encryptedNewKey := "encrypted:" + string(newKey)
@@ -92,7 +91,7 @@ func TestEncryptAndCopy_AES_GCM_KeyRotation(t *testing.T) {
 	zeroTime := dbaccess.Time{}
 
 	db.EXPECT().GetNewestDEC().Return(dbaccess.DEC{
-		Id:           0,
+		Id:           newKeyId,
 		Value:        encryptedOldKey,
 		CreationTime: zeroTime,
 	}, nil).Once()
@@ -114,13 +113,9 @@ func TestEncryptAndCopy_AES_GCM_KeyRotation(t *testing.T) {
 	d, err := time.ParseDuration(defaultKeyRotationPeriod)
 	assert.NoError(t, err)
 
-	crypter := encryption.New_AES_GCM_Crypter(db, es, rs, d, defaultUploadSize)
+	crypter := encryption.NewSymmetricCrypter(db, es, rs, sep, d)
 
-	plaintext := []byte("test plaintext")
-	r := bytes.NewReader(plaintext)
-	w := bytes.NewBuffer(make([]byte, 0))
-
-	assert.NoError(t, crypter.EncryptAndCopy(w, r))
+	assertEncryption(t, newKeyId, newKey, crypter, rs, sep)
 }
 
 func WhenNewestDecProvided(
@@ -132,7 +127,7 @@ func WhenNewestDecProvided(
 	_ *testing.T,
 ) {
 	db.EXPECT().GetNewestDEC().Return(dbaccess.DEC{
-		Id:           0,
+		Id:           firstKeyId,
 		Value:        encryptedKey,
 		CreationTime: dbaccess.Time(time.Now()),
 	}, nil).Once()
@@ -163,20 +158,43 @@ func WhenNoDEC(
 	}, nil).Once()
 
 	db.EXPECT().AddDEC(mock.MatchedBy(func(dec *dbaccess.DEC) bool {
+		dec.Id = firstKeyId
 		return assert.Equal(t, encryptedKey, dec.Value)
 	})).Return(nil).Once()
 }
 
-func newRandomSource(t *testing.T) *encryption_mocks.RandomSource {
-	rs := encryption_mocks.NewRandomSource(t)
+func assertEncryption(
+	t *testing.T,
+	expectedKeyId int64,
+	expectedKey []byte,
+	crypter *encryption.SymmetricCrypter,
+	rs *encryption_mocks.RandomSource,
+	sep *encryption_mocks.SymmetricEncryptionProvider,
+) {
+	plaintext := []byte("test plaintext")
+	r := bytes.NewReader(plaintext)
+	w := bytes.NewBuffer(make([]byte, 0))
+	
+	expectedCiphertext := []byte("test ciphertext")
+	expectedNonce := make([]byte, nonceSize)
+	fillWithNonce(expectedNonce)
 
-	rs.EXPECT().Read(mock.MatchedBy(func(p []byte) bool {
-		for i := range p {
-			p[i] = byte(i)
-		}
+	sep.EXPECT().Encrypt(r, expectedKey, rs).Return(expectedCiphertext, expectedNonce, nil).Once()
+	assert.NoError(t, crypter.EncryptAndCopy(w, r))
+	
+	data := w.Bytes()
+	keyId := data[:8]
+	assert.Equal(t, expectedKeyId, int64(binary.LittleEndian.Uint64(keyId)))
+	
+	nonce := data[8:][:nonceSize]
+	assert.Equal(t, expectedNonce, nonce)
+	
+	ciphertext := data[8 + nonceSize:]
+	assert.Equal(t, expectedCiphertext, ciphertext)
+}
 
-		return len(p) == nonceSize
-	})).Return(nonceSize, nil).Once()
-
-	return rs
+func fillWithNonce(p []byte) {
+	for i := range p {
+		p[i] = byte(i)
+	}
 }
