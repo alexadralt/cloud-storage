@@ -6,6 +6,7 @@ import (
 	slogext "cloud-storage/utils/slogExt"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -13,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -40,14 +40,30 @@ func readNextPart(w http.ResponseWriter, mpReader *multipart.Reader, log *slog.L
 	if errors.As(err, &mbe) {
 		errorMsg := "Multipart content exceeds max upload size"
 		log.Error(errorMsg)
-		http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+
+		if err := writeError(w, TooBigContentSize, errorMsg, http.StatusUnprocessableEntity); err != nil {
+			log.Error("Could not write response", slogext.Error(err))
+		}
+		return nil
+	}
+
+	if errors.Is(err, io.EOF) {
+		errorMsg := "Unexpected end of a multipart form"
+		log.Error(errorMsg)
+
+		if err := writeError(w, UnexpectedEOF, errorMsg, http.StatusUnprocessableEntity); err != nil {
+			log.Error("Could not write response", slogext.Error(err))
+		}
 		return nil
 	}
 
 	if err != nil {
-		errorMsg := "Invalid multipart form"
+		errorMsg := "Invalid multipart form part"
 		log.Error(errorMsg, slogext.Error(err))
-		http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+
+		if err := writeError(w, InvalidContentFormat, errorMsg, http.StatusUnprocessableEntity); err != nil {
+			log.Error("Could not write response", slogext.Error(err))
+		}
 		return nil
 	}
 
@@ -63,9 +79,12 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 		log := slogext.LogWithOp(op, r.Context())
 
 		if ok, mediaType := isMultipartForm(r); !ok {
-			errMsg := strings.Join([]string{"unsupported media type", mediaType}, ": ")
+			errMsg := fmt.Sprintf("Unsupported media type: %s", mediaType)
 			log.Error(errMsg)
-			http.Error(w, errMsg, http.StatusUnsupportedMediaType)
+
+			if err := writeError(w, InvalidContentFormat, errMsg, http.StatusUnsupportedMediaType); err != nil {
+				log.Error("Could not write response", slogext.Error(err))
+			}
 			return
 		}
 
@@ -74,7 +93,10 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 		if err != nil {
 			errorMsg := "Invalid multipart form"
 			log.Error(errorMsg, slogext.Error(err))
-			http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+
+			if err := writeError(w, InvalidContentFormat, errorMsg, http.StatusUnprocessableEntity); err != nil {
+				log.Error("Could not write response", slogext.Error(err))
+			}
 			return
 		}
 
@@ -94,7 +116,10 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 				// do nothing
 			} else if err != nil {
 				log.Error("Could not read file-size", slogext.Error(err))
-				http.Error(w, "Invalid file-size", http.StatusUnprocessableEntity)
+
+				if err := writeError(w, InvalidContentFormat, "Invalid file-size", http.StatusUnprocessableEntity); err != nil {
+					log.Error("Could not write response", slogext.Error(err))
+				}
 				return
 			}
 
@@ -104,13 +129,19 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 			if fileSize > maxUploadSize || fileSize <= 0 {
 				errorMsg := "file-size is not in valid range"
 				log.Error(errorMsg, slog.Int64("file-size", fileSize), slog.Int64("max-upload-size", maxUploadSize))
-				http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+
+				if err := writeError(w, InvalidContentFormat, errorMsg, http.StatusUnprocessableEntity); err != nil {
+					log.Error("Could not write response", slogext.Error(err))
+				}
 				return
 			}
 		} else {
 			errorMsg := "file-size is not provided"
 			log.Error(errorMsg)
-			http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+
+			if err := writeError(w, InvalidContentFormat, errorMsg, http.StatusUnprocessableEntity); err != nil {
+				log.Error("Could not write response", slogext.Error(err))
+			}
 			return
 		}
 
@@ -125,21 +156,28 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 		if filename == "" {
 			errorMsg := "Expected file but found different form part"
 			log.Error(errorMsg)
-			http.Error(w, errorMsg, http.StatusUnprocessableEntity)
+
+			if err := writeError(w, InvalidContentFormat, errorMsg, http.StatusUnprocessableEntity); err != nil {
+				log.Error("Could not write response", slogext.Error(err))
+			}
 			return
 		}
 
 		encFileName, err := c.EncryptFileName(filename)
 		if err != nil {
 			log.Error("Could not encrypt file name", slogext.Error(err))
-			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+
+			if err := writeError(w, InternalApiError, "", http.StatusServiceUnavailable); err != nil {
+				log.Error("Could not write response", slogext.Error(err))
+			}
 			return
 		}
 
 		// this loop regenerates uuid in case of duplicate
+		var strId string
 		for {
 			id := uuid.New()
-			strId := id.String()
+			strId = id.String()
 			if strId == "" {
 				panic("Invalid uuid generated")
 			}
@@ -151,12 +189,15 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 					continue
 				} else {
 					log.Error("Could not save file info to a db", slogext.Error(err))
-					http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+
+					if err := writeError(w, InternalApiError, "", http.StatusServiceUnavailable); err != nil {
+						log.Error("Could not write response", slogext.Error(err))
+					}
 					return
 				}
 			}
 
-			path := strings.Join([]string{storageDir, strId}, "/")
+			path := filepath.Join(storageDir, strId)
 			err = func() error {
 				path, err = filepath.Abs(path)
 				if err != nil {
@@ -182,9 +223,13 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 				log.Error("Could not save file to disk", slogext.Error(err))
 				var tbfe tooBigFileError
 				if errors.As(err, &tbfe) {
-					http.Error(w, tbfe.Error(), http.StatusUnprocessableEntity)
+					if err := writeError(w, TooBigContentSize, tbfe.Error(), http.StatusRequestEntityTooLarge); err != nil {
+						log.Error("Could not write response", slogext.Error(err))
+					}
 				} else {
-					http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+					if err := writeError(w, InternalApiError, "", http.StatusServiceUnavailable); err != nil {
+						log.Error("Could not write response", slogext.Error(err))
+					}
 				}
 
 				err := db.RemoveFile(strId)
@@ -212,7 +257,11 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 			break
 		}
 
-		w.WriteHeader(http.StatusCreated)
+		resp := UploadResponse{
+			Id:       strId,
+			FileName: filename,
+		}
+		writeResponse(w, resp, http.StatusCreated)
 	}
 }
 
