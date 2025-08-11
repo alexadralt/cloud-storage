@@ -33,6 +33,7 @@ func TestEncryptAndCopy_AES_GCM(t *testing.T) {
 			db *db_access_mocks.DbAccess,
 			es *encryption_mocks.EncryptionService,
 			rs *encryption_mocks.RandomSource,
+			sep *encryption_mocks.SymmetricEncryptionProvider,
 			encryptedKey string,
 			key []byte,
 			t *testing.T,
@@ -60,7 +61,7 @@ func TestEncryptAndCopy_AES_GCM(t *testing.T) {
 
 			encryptedKey := "encrypted:" + string(key)
 
-			tc.cfg(db, es, rs, encryptedKey, key, t)
+			tc.cfg(db, es, rs, sep, encryptedKey, key, t)
 
 			d, err := time.ParseDuration(defaultKeyRotationPeriod)
 			assert.NoError(t, err)
@@ -89,6 +90,8 @@ func TestEncryptAndCopy_AES_GCM_KeyRotation(t *testing.T) {
 	encryptedNewKey := "encrypted:" + string(newKey)
 
 	zeroTime := dbaccess.Time{}
+
+	sep.EXPECT().GetKeySize().Return(aesKeySize).Once()
 
 	db.EXPECT().GetNewestDEC().Return(dbaccess.DEC{
 		Id:           newKeyId,
@@ -121,10 +124,11 @@ func TestEncryptAndCopy_AES_GCM_KeyRotation(t *testing.T) {
 func WhenNewestDecProvided(
 	db *db_access_mocks.DbAccess,
 	es *encryption_mocks.EncryptionService,
-	_ *encryption_mocks.RandomSource,
+	rs *encryption_mocks.RandomSource,
+	sep *encryption_mocks.SymmetricEncryptionProvider,
 	encryptedKey string,
 	key []byte,
-	_ *testing.T,
+	t *testing.T,
 ) {
 	db.EXPECT().GetNewestDEC().Return(dbaccess.DEC{
 		Id:           firstKeyId,
@@ -141,6 +145,7 @@ func WhenNoDEC(
 	db *db_access_mocks.DbAccess,
 	es *encryption_mocks.EncryptionService,
 	rs *encryption_mocks.RandomSource,
+	sep *encryption_mocks.SymmetricEncryptionProvider,
 	encryptedKey string,
 	key []byte,
 	t *testing.T,
@@ -161,6 +166,8 @@ func WhenNoDEC(
 		dec.Id = firstKeyId
 		return assert.Equal(t, encryptedKey, dec.Value)
 	})).Return(nil).Once()
+
+	sep.EXPECT().GetKeySize().Return(aesKeySize)
 }
 
 func assertEncryption(

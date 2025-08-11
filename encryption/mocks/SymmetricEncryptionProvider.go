@@ -22,6 +22,66 @@ func (_m *SymmetricEncryptionProvider) EXPECT() *SymmetricEncryptionProvider_Exp
 	return &SymmetricEncryptionProvider_Expecter{mock: &_m.Mock}
 }
 
+// Decrypt provides a mock function with given fields: r, key, nonce
+func (_m *SymmetricEncryptionProvider) Decrypt(r io.Reader, key []byte, nonce []byte) ([]byte, error) {
+	ret := _m.Called(r, key, nonce)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Decrypt")
+	}
+
+	var r0 []byte
+	var r1 error
+	if rf, ok := ret.Get(0).(func(io.Reader, []byte, []byte) ([]byte, error)); ok {
+		return rf(r, key, nonce)
+	}
+	if rf, ok := ret.Get(0).(func(io.Reader, []byte, []byte) []byte); ok {
+		r0 = rf(r, key, nonce)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(io.Reader, []byte, []byte) error); ok {
+		r1 = rf(r, key, nonce)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// SymmetricEncryptionProvider_Decrypt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Decrypt'
+type SymmetricEncryptionProvider_Decrypt_Call struct {
+	*mock.Call
+}
+
+// Decrypt is a helper method to define mock.On call
+//   - r io.Reader
+//   - key []byte
+//   - nonce []byte
+func (_e *SymmetricEncryptionProvider_Expecter) Decrypt(r interface{}, key interface{}, nonce interface{}) *SymmetricEncryptionProvider_Decrypt_Call {
+	return &SymmetricEncryptionProvider_Decrypt_Call{Call: _e.mock.On("Decrypt", r, key, nonce)}
+}
+
+func (_c *SymmetricEncryptionProvider_Decrypt_Call) Run(run func(r io.Reader, key []byte, nonce []byte)) *SymmetricEncryptionProvider_Decrypt_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(io.Reader), args[1].([]byte), args[2].([]byte))
+	})
+	return _c
+}
+
+func (_c *SymmetricEncryptionProvider_Decrypt_Call) Return(plaintext []byte, err error) *SymmetricEncryptionProvider_Decrypt_Call {
+	_c.Call.Return(plaintext, err)
+	return _c
+}
+
+func (_c *SymmetricEncryptionProvider_Decrypt_Call) RunAndReturn(run func(io.Reader, []byte, []byte) ([]byte, error)) *SymmetricEncryptionProvider_Decrypt_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Encrypt provides a mock function with given fields: r, key, rs
 func (_m *SymmetricEncryptionProvider) Encrypt(r io.Reader, key []byte, rs encryption.RandomSource) ([]byte, []byte, error) {
 	ret := _m.Called(r, key, rs)
@@ -87,6 +147,96 @@ func (_c *SymmetricEncryptionProvider_Encrypt_Call) Return(ciphertext []byte, no
 }
 
 func (_c *SymmetricEncryptionProvider_Encrypt_Call) RunAndReturn(run func(io.Reader, []byte, encryption.RandomSource) ([]byte, []byte, error)) *SymmetricEncryptionProvider_Encrypt_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetKeySize provides a mock function with no fields
+func (_m *SymmetricEncryptionProvider) GetKeySize() int {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetKeySize")
+	}
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// SymmetricEncryptionProvider_GetKeySize_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetKeySize'
+type SymmetricEncryptionProvider_GetKeySize_Call struct {
+	*mock.Call
+}
+
+// GetKeySize is a helper method to define mock.On call
+func (_e *SymmetricEncryptionProvider_Expecter) GetKeySize() *SymmetricEncryptionProvider_GetKeySize_Call {
+	return &SymmetricEncryptionProvider_GetKeySize_Call{Call: _e.mock.On("GetKeySize")}
+}
+
+func (_c *SymmetricEncryptionProvider_GetKeySize_Call) Run(run func()) *SymmetricEncryptionProvider_GetKeySize_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *SymmetricEncryptionProvider_GetKeySize_Call) Return(_a0 int) *SymmetricEncryptionProvider_GetKeySize_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *SymmetricEncryptionProvider_GetKeySize_Call) RunAndReturn(run func() int) *SymmetricEncryptionProvider_GetKeySize_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetNonceSize provides a mock function with no fields
+func (_m *SymmetricEncryptionProvider) GetNonceSize() int {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNonceSize")
+	}
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// SymmetricEncryptionProvider_GetNonceSize_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNonceSize'
+type SymmetricEncryptionProvider_GetNonceSize_Call struct {
+	*mock.Call
+}
+
+// GetNonceSize is a helper method to define mock.On call
+func (_e *SymmetricEncryptionProvider_Expecter) GetNonceSize() *SymmetricEncryptionProvider_GetNonceSize_Call {
+	return &SymmetricEncryptionProvider_GetNonceSize_Call{Call: _e.mock.On("GetNonceSize")}
+}
+
+func (_c *SymmetricEncryptionProvider_GetNonceSize_Call) Run(run func()) *SymmetricEncryptionProvider_GetNonceSize_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *SymmetricEncryptionProvider_GetNonceSize_Call) Return(_a0 int) *SymmetricEncryptionProvider_GetNonceSize_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *SymmetricEncryptionProvider_GetNonceSize_Call) RunAndReturn(run func() int) *SymmetricEncryptionProvider_GetNonceSize_Call {
 	_c.Call.Return(run)
 	return _c
 }

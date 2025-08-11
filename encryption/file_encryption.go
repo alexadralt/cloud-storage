@@ -1,6 +1,7 @@
 package encryption
 
 import (
+	"bytes"
 	dbaccess "cloud-storage/db_access"
 	"crypto/aes"
 	"crypto/cipher"
@@ -14,10 +15,17 @@ import (
 type Crypter interface {
 	EncryptAndCopy(w io.Writer, r io.Reader) error
 	EncryptFileName(filename string) (string, error)
+	
+	DecryptAndCopy(w io.Writer, r io.Reader) error
+	DecryptFileName(ciphertext string) (string, error)
 }
 
 type SymmetricEncryptionProvider interface {
 	Encrypt(r io.Reader, key []byte, rs RandomSource) (ciphertext []byte, nonce []byte, err error)
+	Decrypt(r io.Reader, key, nonce []byte) (plaintext []byte, err error)
+	
+	GetNonceSize() int
+	GetKeySize() int
 }
 
 type RandomSource io.Reader
@@ -32,23 +40,34 @@ func NewAesGcmProvider(maxFileSize int64) AesGcmProvider {
 	}
 }
 
-func (p AesGcmProvider) Encrypt(r io.Reader, key []byte, rs RandomSource) ([]byte, []byte, error) {
+func (p AesGcmProvider) GetNonceSize() int {
+	return 12
+}
+
+func (p AesGcmProvider) GetKeySize() int {
+	return 32
+}
+
+func (p AesGcmProvider) Encrypt(r io.Reader, key []byte, rs RandomSource) (ciphertext []byte, nonce []byte, err error) {
 	const op = "encryption.AesGcmProvider.Encrypt"
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: aes.NewCipher: %w", op, err)
+		err = fmt.Errorf("%s: aes.NewCipher: %w", op, err)
+		return
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: cipher.NewGCM: %w", op, err)
+		err = fmt.Errorf("%s: cipher.NewGCM: %w", op, err)
+		return
 	}
 
-	nonce := make([]byte, gcm.NonceSize())
+	nonce = make([]byte, gcm.NonceSize())
 	_, err = rs.Read(nonce)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: rs.Read: %w", op, err)
+		err = fmt.Errorf("%s: rs.Read: %w", op, err)
+		return
 	}
 
 	data := make([]byte, p.maxFileSize)
@@ -56,10 +75,43 @@ func (p AesGcmProvider) Encrypt(r io.Reader, key []byte, rs RandomSource) ([]byt
 	if errors.Is(err, io.ErrUnexpectedEOF) {
 		// do nothing
 	} else if err != nil {
-		return nil, nil, fmt.Errorf("%s: buf.ReadFrom: %w", op, err)
+		err = fmt.Errorf("%s: buf.ReadFrom: %w", op, err)
+		return
 	}
 
-	return gcm.Seal(data[:0], nonce, data[:n], nil), nonce, nil
+	ciphertext = gcm.Seal(data[:0], nonce, data[:n], nil)
+	return
+}
+
+func (p AesGcmProvider) Decrypt(r io.Reader, key, nonce []byte) (plaintext []byte, err error) {
+	const op = "encryption.AesGcmProvider.Encrypt"
+	
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		err = fmt.Errorf("%s: aes.NewCipher: %w", op, err)
+		return
+	}
+	
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		err = fmt.Errorf("%s: cipher.NewGCM: %w", op, err)
+		return
+	}
+	
+	// we use bytes.Buffer here because size of the ciphertext may be bigger than maxFileSize
+	buf := bytes.NewBuffer(make([]byte, 0, p.maxFileSize))
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		err = fmt.Errorf("%s: buf.Read: %w", op, err)
+		return
+	}
+	
+	ciphertext := buf.Bytes()
+	plaintext, err = gcm.Open(ciphertext[:0], nonce, ciphertext, nil)
+	if err != nil {
+		err = fmt.Errorf("%s: gcm.Open: %w", op, err)
+	}
+	return
 }
 
 type SymmetricCrypter struct {
@@ -88,7 +140,7 @@ func NewSymmetricCrypter(
 }
 
 func (c *SymmetricCrypter) EncryptFileName(filename string) (string, error) {
-	const op = "encryption.AES_GCM_Crypter.EncryptFileName"
+	const op = "encryption.SymmetricCrypter.EncryptFileName"
 
 	response, err := c.es.MakeEncryptRequest([]byte(filename))
 	if err != nil {
@@ -98,10 +150,19 @@ func (c *SymmetricCrypter) EncryptFileName(filename string) (string, error) {
 	return string(response.Ciphertext), nil
 }
 
-const aesKeySize = 32
+func (c *SymmetricCrypter) DecryptFileName(ciphertext string) (string, error) {
+	const op = "encryption.SymmetricCrypter.DecryptFileName"
+	
+	response, err := c.es.MakeDecryptRequest([]byte(ciphertext))
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+	
+	return string(response.Plaintext), nil
+}
 
 func (c *SymmetricCrypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
-	const op = "encryption.AES_GCM_Crypter.EncryptAndCopy"
+	const op = "encryption.SymmetricCrypter.EncryptAndCopy"
 
 	var key []byte
 
@@ -110,7 +171,7 @@ func (c *SymmetricCrypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
 	if errors.As(err, &nre) || time.Since(time.Time(dec.CreationTime)) > c.decRotationPeriod {
 		// generate new key
 
-		key = make([]byte, aesKeySize)
+		key = make([]byte, c.sep.GetKeySize())
 		_, err := c.rs.Read(key)
 		if err != nil {
 			return fmt.Errorf("%s: c.rs.Read: %w", op, err)
@@ -174,5 +235,41 @@ func (c *SymmetricCrypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
 		return fmt.Errorf("%s: write encrypted data: %w", op, err)
 	}
 
+	return nil
+}
+
+func (c *SymmetricCrypter) DecryptAndCopy(w io.Writer, r io.Reader) error {
+	const op = "encryption.SymmetricCrypter.DecryptAndCopy"
+	
+	keyIdBytes := make([]byte, 8)
+	_, err := r.Read(keyIdBytes)
+	if err != nil {
+		return fmt.Errorf("%s: r.Read: %w", op, err)
+	}
+	
+	keyId := binary.LittleEndian.Uint64(keyIdBytes)
+	dec, err := c.db.GetDEC(dbaccess.DecId(keyId))
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	
+	response, err := c.es.MakeDecryptRequest([]byte(dec.Value))
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	
+	nonce := make([]byte, c.sep.GetNonceSize())
+	r.Read(nonce)
+	
+	plaintext, err := c.sep.Decrypt(r, []byte(response.Plaintext), nonce)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	
+	_, err = w.Write(plaintext)
+	if err != nil {
+		return fmt.Errorf("%s: w.Write: %w", op, err)
+	}
+	
 	return nil
 }

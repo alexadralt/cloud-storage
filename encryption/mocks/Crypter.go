@@ -21,6 +21,109 @@ func (_m *Crypter) EXPECT() *Crypter_Expecter {
 	return &Crypter_Expecter{mock: &_m.Mock}
 }
 
+// DecryptAndCopy provides a mock function with given fields: w, r
+func (_m *Crypter) DecryptAndCopy(w io.Writer, r io.Reader) error {
+	ret := _m.Called(w, r)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DecryptAndCopy")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(io.Writer, io.Reader) error); ok {
+		r0 = rf(w, r)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Crypter_DecryptAndCopy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DecryptAndCopy'
+type Crypter_DecryptAndCopy_Call struct {
+	*mock.Call
+}
+
+// DecryptAndCopy is a helper method to define mock.On call
+//   - w io.Writer
+//   - r io.Reader
+func (_e *Crypter_Expecter) DecryptAndCopy(w interface{}, r interface{}) *Crypter_DecryptAndCopy_Call {
+	return &Crypter_DecryptAndCopy_Call{Call: _e.mock.On("DecryptAndCopy", w, r)}
+}
+
+func (_c *Crypter_DecryptAndCopy_Call) Run(run func(w io.Writer, r io.Reader)) *Crypter_DecryptAndCopy_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(io.Writer), args[1].(io.Reader))
+	})
+	return _c
+}
+
+func (_c *Crypter_DecryptAndCopy_Call) Return(_a0 error) *Crypter_DecryptAndCopy_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Crypter_DecryptAndCopy_Call) RunAndReturn(run func(io.Writer, io.Reader) error) *Crypter_DecryptAndCopy_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DecryptFileName provides a mock function with given fields: ciphertext
+func (_m *Crypter) DecryptFileName(ciphertext string) (string, error) {
+	ret := _m.Called(ciphertext)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DecryptFileName")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (string, error)); ok {
+		return rf(ciphertext)
+	}
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(ciphertext)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(ciphertext)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Crypter_DecryptFileName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DecryptFileName'
+type Crypter_DecryptFileName_Call struct {
+	*mock.Call
+}
+
+// DecryptFileName is a helper method to define mock.On call
+//   - ciphertext string
+func (_e *Crypter_Expecter) DecryptFileName(ciphertext interface{}) *Crypter_DecryptFileName_Call {
+	return &Crypter_DecryptFileName_Call{Call: _e.mock.On("DecryptFileName", ciphertext)}
+}
+
+func (_c *Crypter_DecryptFileName_Call) Run(run func(ciphertext string)) *Crypter_DecryptFileName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Crypter_DecryptFileName_Call) Return(_a0 string, _a1 error) *Crypter_DecryptFileName_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Crypter_DecryptFileName_Call) RunAndReturn(run func(string) (string, error)) *Crypter_DecryptFileName_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // EncryptAndCopy provides a mock function with given fields: w, r
 func (_m *Crypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
 	ret := _m.Called(w, r)
