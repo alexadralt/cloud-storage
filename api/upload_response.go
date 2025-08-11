@@ -17,6 +17,7 @@ type ApiErrorCode int
 
 type ApiError struct {
 	Code        ApiErrorCode `json:"code"`
+	ParamName   string       `json:"parameter_name,omitempty"`
 	Description string       `json:"description,omitempty"`
 }
 
@@ -26,11 +27,20 @@ const (
 	InvalidContentFormat
 	UnexpectedEOF
 	TooBigContentSize
+	ParameterOutOfRange
 )
 
 func addError(r *UploadResponse, code ApiErrorCode, description string) {
 	r.Errors = append(r.Errors, ApiError{
 		Code:        code,
+		Description: description,
+	})
+}
+
+func addParamError(r *UploadResponse, code ApiErrorCode, param string, description string) {
+	r.Errors = append(r.Errors, ApiError{
+		Code:        code,
+		ParamName:   param,
 		Description: description,
 	})
 }
@@ -54,12 +64,24 @@ func writeResponse(w http.ResponseWriter, resp UploadResponse, status int) error
 
 func writeError(w http.ResponseWriter, code ApiErrorCode, description string, status int) error {
 	const op = "api.writeError"
-	
+
 	resp := UploadResponse{}
 	addError(&resp, code, description)
- 	if err := writeResponse(w, resp, status); err != nil {
+	if err := writeResponse(w, resp, status); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
-	
+
+	return nil
+}
+
+func writeParamError(w http.ResponseWriter, code ApiErrorCode, param string, description string, status int) error {
+	const op = "api.writeParamError"
+
+	resp := UploadResponse{}
+	addParamError(&resp, code, param, description)
+	if err := writeResponse(w, resp, status); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
 	return nil
 }

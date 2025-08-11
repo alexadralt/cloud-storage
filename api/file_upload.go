@@ -40,8 +40,8 @@ func readNextPart(w http.ResponseWriter, mpReader *multipart.Reader, log *slog.L
 	if errors.As(err, &mbe) {
 		errorMsg := "Multipart content exceeds max upload size"
 		log.Error(errorMsg)
-
-		if err := writeError(w, TooBigContentSize, errorMsg, http.StatusUnprocessableEntity); err != nil {
+		
+		if err := writeError(w, TooBigContentSize, errorMsg, http.StatusRequestEntityTooLarge); err != nil {
 			log.Error("Could not write response", slogext.Error(err))
 		}
 		return nil
@@ -130,7 +130,7 @@ func FileUpload(db dbaccess.DbAccess, cfg UploadConfig, c encryption.Crypter) ht
 				errorMsg := "file-size is not in valid range"
 				log.Error(errorMsg, slog.Int64("file-size", fileSize), slog.Int64("max-upload-size", maxUploadSize))
 
-				if err := writeError(w, InvalidContentFormat, errorMsg, http.StatusUnprocessableEntity); err != nil {
+				if err := writeParamError(w, ParameterOutOfRange, "file_size", errorMsg, http.StatusUnprocessableEntity); err != nil {
 					log.Error("Could not write response", slogext.Error(err))
 				}
 				return
