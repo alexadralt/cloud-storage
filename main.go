@@ -77,6 +77,7 @@ func main() {
 		r.Use(middleware.Recoverer)
 
 		r.Post("/upload", api.FileUpload(db, appConfig.UploadConfig(), fileCrypter))
+		r.Get("/download", api.FileDownload(db, fileCrypter, appConfig.FileStoragePath))
 	})
 
 	log.Info(

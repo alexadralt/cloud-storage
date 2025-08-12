@@ -57,6 +57,8 @@ type DEC struct {
 type DbAccess interface {
 	AddFile(generatedName string, filename string) error
 	RemoveFile(generatedName string) error
+	GetFile(generatedName string) (filename string, err error)
+	
 	GetDEC(id DecId) (DEC, error)
 	GetNewestDEC() (DEC, error)
 	AddDEC(dec *DEC) error

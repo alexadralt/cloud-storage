@@ -16,12 +16,12 @@ type EncryptionService interface {
 }
 
 type EncryptResponse struct {
-	Ciphertext []byte `json:"ciphertext"`
+	Ciphertext string `json:"ciphertext"`
 	KeyVersion int64  `json:"key_version"`
 }
 
 type DecryptResponse struct {
-	Plaintext []byte `json:"plaintext"`
+	Plaintext string `json:"plaintext"`
 }
 
 type vaultAction string
@@ -105,6 +105,7 @@ func (v *Vault) MakeEncryptRequest(plaintext []byte) (EncryptResponse, error) {
 	if err != nil {
 		return EncryptResponse{}, fmt.Errorf("%s: %w", op, err)
 	}
+	defer resp.Body.Close()
 
 	var response VaultResponse[EncryptResponse]
 
@@ -125,6 +126,7 @@ func (v *Vault) MakeDecryptRequest(ciphertext []byte) (DecryptResponse, error) {
 	if err != nil {
 		return DecryptResponse{}, fmt.Errorf("%s: %w", op, err)
 	}
+	defer resp.Body.Close()
 
 	var response VaultResponse[DecryptResponse]
 
@@ -135,13 +137,13 @@ func (v *Vault) MakeDecryptRequest(ciphertext []byte) (DecryptResponse, error) {
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0))
-	base64Decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewReader(response.Data.Plaintext))
+	base64Decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewReader([]byte(response.Data.Plaintext)))
 	_, err = buf.ReadFrom(base64Decoder)
 	if err != nil {
 		return DecryptResponse{}, fmt.Errorf("%s: decoder.Read: %w", op, err)
 	}
 
-	return DecryptResponse{Plaintext: buf.Bytes()}, nil
+	return DecryptResponse{Plaintext: buf.String()}, nil
 }
 
 func newVaultRequestBody(first string, value []byte, last string) *bytes.Reader {
@@ -174,7 +176,6 @@ func (v *Vault) makeRequest(action vaultAction, body *bytes.Reader) (*http.Respo
 	if err != nil {
 		return nil, fmt.Errorf("%s: http.DefaultClient.Do: %w", op, err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		buf := bytes.NewBuffer(make([]byte, 0))

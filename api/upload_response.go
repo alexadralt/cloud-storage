@@ -10,7 +10,11 @@ type UploadResponse struct {
 	Id       string     `json:"id,omitempty"`
 	FileName string     `json:"file_name,omitempty"`
 	FilePath string     `json:"file_path,omitempty"`
-	Errors   []ApiError `json:"errors,omitempty"`
+	ErrorHolder
+}
+
+type DownloadResponse struct {
+	ErrorHolder
 }
 
 type ApiErrorCode int
@@ -21,6 +25,10 @@ type ApiError struct {
 	Description string       `json:"description,omitempty"`
 }
 
+type ErrorHolder struct {
+	Errors []ApiError `json:"errors,omitempty"`
+}
+
 const (
 	None ApiErrorCode = iota
 	InternalApiError
@@ -28,16 +36,17 @@ const (
 	UnexpectedEOF
 	TooBigContentSize
 	ParameterOutOfRange
+	NotFound
 )
 
-func addError(r *UploadResponse, code ApiErrorCode, description string) {
+func addError(r *ErrorHolder, code ApiErrorCode, description string) {
 	r.Errors = append(r.Errors, ApiError{
 		Code:        code,
 		Description: description,
 	})
 }
 
-func addParamError(r *UploadResponse, code ApiErrorCode, param string, description string) {
+func addParamError(r *ErrorHolder, code ApiErrorCode, param string, description string) {
 	r.Errors = append(r.Errors, ApiError{
 		Code:        code,
 		ParamName:   param,
@@ -45,7 +54,7 @@ func addParamError(r *UploadResponse, code ApiErrorCode, param string, descripti
 	})
 }
 
-func writeResponse(w http.ResponseWriter, resp UploadResponse, status int) error {
+func writeResponse(w http.ResponseWriter, resp any, status int) error {
 	const op = "api.writeResponse"
 
 	body, err := json.Marshal(resp)
@@ -66,7 +75,7 @@ func writeError(w http.ResponseWriter, code ApiErrorCode, description string, st
 	const op = "api.writeError"
 
 	resp := UploadResponse{}
-	addError(&resp, code, description)
+	addError(&resp.ErrorHolder, code, description)
 	if err := writeResponse(w, resp, status); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -78,7 +87,7 @@ func writeParamError(w http.ResponseWriter, code ApiErrorCode, param string, des
 	const op = "api.writeParamError"
 
 	resp := UploadResponse{}
-	addParamError(&resp, code, param, description)
+	addParamError(&resp.ErrorHolder, code, param, description)
 	if err := writeResponse(w, resp, status); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

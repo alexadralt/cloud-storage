@@ -108,6 +108,27 @@ func (db *SqliteDb) RemoveFile(generatedName string) error {
 	return nil
 }
 
+func (db *SqliteDb) GetFile(generatedName string) (filename string, err error) {
+	const op = "db-access.sqlite.GetFile"
+	
+	stmt, err := db.Prepare(`
+	SELECT fileName FROM files WHERE generatedName = ? LIMIT 1
+	`)
+	if err != nil {
+		err = fmt.Errorf("%s: db.Prepare: %w", op, err)
+		return
+	}
+	defer stmt.Close()
+	
+	err = stmt.QueryRow(generatedName).Scan(&filename)
+	if err != nil {
+		err = fmt.Errorf("%s: stmt.QueryRow: %w", op, err)
+		return
+	}
+	
+	return
+}
+
 func (db *SqliteDb) GetDEC(id dbaccess.DecId) (dbaccess.DEC, error) {
 	const op = "db-access.sqlite.GetDEC"
 

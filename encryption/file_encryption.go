@@ -74,6 +74,7 @@ func (p AesGcmProvider) Encrypt(r io.Reader, key []byte, rs RandomSource) (ciphe
 	n, err := io.ReadFull(r, data)
 	if errors.Is(err, io.ErrUnexpectedEOF) {
 		// do nothing
+		err = nil
 	} else if err != nil {
 		err = fmt.Errorf("%s: buf.ReadFrom: %w", op, err)
 		return
@@ -200,7 +201,7 @@ func (c *SymmetricCrypter) EncryptAndCopy(w io.Writer, r io.Reader) error {
 			return fmt.Errorf("%s: decrypt: %w", op, err)
 		}
 
-		key = response.Plaintext
+		key = []byte(response.Plaintext)
 	}
 
 	// ecnrypt the data
