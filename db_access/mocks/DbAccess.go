@@ -3,7 +3,7 @@
 package db_access_mocks
 
 import (
-	dbaccess "cloud-storage/db_access"
+	db_access "cloud-storage/db_access"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -22,7 +22,7 @@ func (_m *DbAccess) EXPECT() *DbAccess_Expecter {
 }
 
 // AddDEC provides a mock function with given fields: dec
-func (_m *DbAccess) AddDEC(dec *dbaccess.DEC) error {
+func (_m *DbAccess) AddDEC(dec *db_access.DEC) error {
 	ret := _m.Called(dec)
 
 	if len(ret) == 0 {
@@ -30,7 +30,7 @@ func (_m *DbAccess) AddDEC(dec *dbaccess.DEC) error {
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*dbaccess.DEC) error); ok {
+	if rf, ok := ret.Get(0).(func(*db_access.DEC) error); ok {
 		r0 = rf(dec)
 	} else {
 		r0 = ret.Error(0)
@@ -45,14 +45,14 @@ type DbAccess_AddDEC_Call struct {
 }
 
 // AddDEC is a helper method to define mock.On call
-//   - dec *dbaccess.DEC
+//   - dec *db_access.DEC
 func (_e *DbAccess_Expecter) AddDEC(dec interface{}) *DbAccess_AddDEC_Call {
 	return &DbAccess_AddDEC_Call{Call: _e.mock.On("AddDEC", dec)}
 }
 
-func (_c *DbAccess_AddDEC_Call) Run(run func(dec *dbaccess.DEC)) *DbAccess_AddDEC_Call {
+func (_c *DbAccess_AddDEC_Call) Run(run func(dec *db_access.DEC)) *DbAccess_AddDEC_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*dbaccess.DEC))
+		run(args[0].(*db_access.DEC))
 	})
 	return _c
 }
@@ -62,7 +62,7 @@ func (_c *DbAccess_AddDEC_Call) Return(_a0 error) *DbAccess_AddDEC_Call {
 	return _c
 }
 
-func (_c *DbAccess_AddDEC_Call) RunAndReturn(run func(*dbaccess.DEC) error) *DbAccess_AddDEC_Call {
+func (_c *DbAccess_AddDEC_Call) RunAndReturn(run func(*db_access.DEC) error) *DbAccess_AddDEC_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -115,25 +115,25 @@ func (_c *DbAccess_AddFile_Call) RunAndReturn(run func(string, string) error) *D
 }
 
 // GetDEC provides a mock function with given fields: id
-func (_m *DbAccess) GetDEC(id dbaccess.DecId) (dbaccess.DEC, error) {
+func (_m *DbAccess) GetDEC(id db_access.DecId) (db_access.DEC, error) {
 	ret := _m.Called(id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDEC")
 	}
 
-	var r0 dbaccess.DEC
+	var r0 db_access.DEC
 	var r1 error
-	if rf, ok := ret.Get(0).(func(dbaccess.DecId) (dbaccess.DEC, error)); ok {
+	if rf, ok := ret.Get(0).(func(db_access.DecId) (db_access.DEC, error)); ok {
 		return rf(id)
 	}
-	if rf, ok := ret.Get(0).(func(dbaccess.DecId) dbaccess.DEC); ok {
+	if rf, ok := ret.Get(0).(func(db_access.DecId) db_access.DEC); ok {
 		r0 = rf(id)
 	} else {
-		r0 = ret.Get(0).(dbaccess.DEC)
+		r0 = ret.Get(0).(db_access.DEC)
 	}
 
-	if rf, ok := ret.Get(1).(func(dbaccess.DecId) error); ok {
+	if rf, ok := ret.Get(1).(func(db_access.DecId) error); ok {
 		r1 = rf(id)
 	} else {
 		r1 = ret.Error(1)
@@ -148,45 +148,101 @@ type DbAccess_GetDEC_Call struct {
 }
 
 // GetDEC is a helper method to define mock.On call
-//   - id dbaccess.DecId
+//   - id db_access.DecId
 func (_e *DbAccess_Expecter) GetDEC(id interface{}) *DbAccess_GetDEC_Call {
 	return &DbAccess_GetDEC_Call{Call: _e.mock.On("GetDEC", id)}
 }
 
-func (_c *DbAccess_GetDEC_Call) Run(run func(id dbaccess.DecId)) *DbAccess_GetDEC_Call {
+func (_c *DbAccess_GetDEC_Call) Run(run func(id db_access.DecId)) *DbAccess_GetDEC_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(dbaccess.DecId))
+		run(args[0].(db_access.DecId))
 	})
 	return _c
 }
 
-func (_c *DbAccess_GetDEC_Call) Return(_a0 dbaccess.DEC, _a1 error) *DbAccess_GetDEC_Call {
+func (_c *DbAccess_GetDEC_Call) Return(_a0 db_access.DEC, _a1 error) *DbAccess_GetDEC_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *DbAccess_GetDEC_Call) RunAndReturn(run func(dbaccess.DecId) (dbaccess.DEC, error)) *DbAccess_GetDEC_Call {
+func (_c *DbAccess_GetDEC_Call) RunAndReturn(run func(db_access.DecId) (db_access.DEC, error)) *DbAccess_GetDEC_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetFile provides a mock function with given fields: generatedName
+func (_m *DbAccess) GetFile(generatedName string) (string, error) {
+	ret := _m.Called(generatedName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetFile")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (string, error)); ok {
+		return rf(generatedName)
+	}
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(generatedName)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(generatedName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// DbAccess_GetFile_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFile'
+type DbAccess_GetFile_Call struct {
+	*mock.Call
+}
+
+// GetFile is a helper method to define mock.On call
+//   - generatedName string
+func (_e *DbAccess_Expecter) GetFile(generatedName interface{}) *DbAccess_GetFile_Call {
+	return &DbAccess_GetFile_Call{Call: _e.mock.On("GetFile", generatedName)}
+}
+
+func (_c *DbAccess_GetFile_Call) Run(run func(generatedName string)) *DbAccess_GetFile_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *DbAccess_GetFile_Call) Return(filename string, err error) *DbAccess_GetFile_Call {
+	_c.Call.Return(filename, err)
+	return _c
+}
+
+func (_c *DbAccess_GetFile_Call) RunAndReturn(run func(string) (string, error)) *DbAccess_GetFile_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetNewestDEC provides a mock function with no fields
-func (_m *DbAccess) GetNewestDEC() (dbaccess.DEC, error) {
+func (_m *DbAccess) GetNewestDEC() (db_access.DEC, error) {
 	ret := _m.Called()
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetNewestDEC")
 	}
 
-	var r0 dbaccess.DEC
+	var r0 db_access.DEC
 	var r1 error
-	if rf, ok := ret.Get(0).(func() (dbaccess.DEC, error)); ok {
+	if rf, ok := ret.Get(0).(func() (db_access.DEC, error)); ok {
 		return rf()
 	}
-	if rf, ok := ret.Get(0).(func() dbaccess.DEC); ok {
+	if rf, ok := ret.Get(0).(func() db_access.DEC); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(dbaccess.DEC)
+		r0 = ret.Get(0).(db_access.DEC)
 	}
 
 	if rf, ok := ret.Get(1).(func() error); ok {
@@ -215,12 +271,12 @@ func (_c *DbAccess_GetNewestDEC_Call) Run(run func()) *DbAccess_GetNewestDEC_Cal
 	return _c
 }
 
-func (_c *DbAccess_GetNewestDEC_Call) Return(_a0 dbaccess.DEC, _a1 error) *DbAccess_GetNewestDEC_Call {
+func (_c *DbAccess_GetNewestDEC_Call) Return(_a0 db_access.DEC, _a1 error) *DbAccess_GetNewestDEC_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *DbAccess_GetNewestDEC_Call) RunAndReturn(run func() (dbaccess.DEC, error)) *DbAccess_GetNewestDEC_Call {
+func (_c *DbAccess_GetNewestDEC_Call) RunAndReturn(run func() (db_access.DEC, error)) *DbAccess_GetNewestDEC_Call {
 	_c.Call.Return(run)
 	return _c
 }

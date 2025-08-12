@@ -105,7 +105,7 @@ func TestEncryptAndCopy_AES_GCM_KeyRotation(t *testing.T) {
 	})).Return(aesKeySize, nil).Once()
 
 	es.EXPECT().MakeEncryptRequest(newKey).Return(encryption.EncryptResponse{
-		Ciphertext: []byte(encryptedNewKey),
+		Ciphertext: encryptedNewKey,
 		KeyVersion: 1,
 	}, nil).Once()
 
@@ -137,7 +137,7 @@ func WhenNewestDecProvided(
 	}, nil).Once()
 
 	es.EXPECT().MakeDecryptRequest([]byte(encryptedKey)).Return(encryption.DecryptResponse{
-		Plaintext: key,
+		Plaintext: string(key),
 	}, nil).Once()
 }
 
@@ -158,7 +158,7 @@ func WhenNoDEC(
 	})).Return(aesKeySize, nil).Once()
 
 	es.EXPECT().MakeEncryptRequest(key).Return(encryption.EncryptResponse{
-		Ciphertext: []byte(encryptedKey),
+		Ciphertext: encryptedKey,
 		KeyVersion: 1,
 	}, nil).Once()
 

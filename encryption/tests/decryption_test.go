@@ -70,7 +70,7 @@ func TestDecryptAndCopy_AES_GCM(t *testing.T) {
 		return assert.Equal(t, encryptedKey, ciphertext)
 	})).RunAndReturn(func(b []byte) (encryption.DecryptResponse, error) {
 		return encryption.DecryptResponse{
-			Plaintext: expectedKey,
+			Plaintext: string(expectedKey),
 		}, nil
 	})
 
