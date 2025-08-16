@@ -70,6 +70,7 @@ func (p AesGcmProvider) Encrypt(r io.Reader, key []byte, rs RandomSource) (ciphe
 		return
 	}
 
+	// TODO: p.maxFileSize can be really large so we want to do this in chunks
 	data := make([]byte, p.maxFileSize)
 	n, err := io.ReadFull(r, data)
 	if errors.Is(err, io.ErrUnexpectedEOF) {
@@ -99,6 +100,7 @@ func (p AesGcmProvider) Decrypt(r io.Reader, key, nonce []byte) (plaintext []byt
 		return
 	}
 	
+	// TODO: p.maxFileSize can be really large so we want to do this in chunks
 	// we use bytes.Buffer here because size of the ciphertext may be bigger than maxFileSize
 	buf := bytes.NewBuffer(make([]byte, 0, p.maxFileSize))
 	_, err = buf.ReadFrom(r)

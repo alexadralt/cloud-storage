@@ -54,6 +54,12 @@ type DEC struct {
 	CreationTime Time
 }
 
+type User struct {
+	Id int64
+	Name string
+	PasswordHash []byte
+}
+
 type DbAccess interface {
 	AddFile(generatedName string, filename string) error
 	RemoveFile(generatedName string) error
@@ -62,4 +68,7 @@ type DbAccess interface {
 	GetDEC(id DecId) (DEC, error)
 	GetNewestDEC() (DEC, error)
 	AddDEC(dec *DEC) error
+	
+	GetUser(user *User) error
+	AddUser(user *User) error
 }

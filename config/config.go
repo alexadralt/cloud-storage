@@ -29,6 +29,7 @@ type AppConfig struct {
 	MaxUploadSize     int64    `json:"max-upload-size" env-default:"1024"`
 	FileStoragePath   string   `json:"file-storage-path" env-required:"true"`
 	DecRotationPeriod Duration `json:"dec-rotation-period" env-required:"true"`
+	TokenTimeToLive   Duration `json:"token_time_to_live" env-default:"1h"`
 	HTTPConfig
 }
 

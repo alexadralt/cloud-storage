@@ -114,6 +114,52 @@ func (_c *DbAccess_AddFile_Call) RunAndReturn(run func(string, string) error) *D
 	return _c
 }
 
+// AddUser provides a mock function with given fields: user
+func (_m *DbAccess) AddUser(user *db_access.User) error {
+	ret := _m.Called(user)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddUser")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*db_access.User) error); ok {
+		r0 = rf(user)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DbAccess_AddUser_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddUser'
+type DbAccess_AddUser_Call struct {
+	*mock.Call
+}
+
+// AddUser is a helper method to define mock.On call
+//   - user *db_access.User
+func (_e *DbAccess_Expecter) AddUser(user interface{}) *DbAccess_AddUser_Call {
+	return &DbAccess_AddUser_Call{Call: _e.mock.On("AddUser", user)}
+}
+
+func (_c *DbAccess_AddUser_Call) Run(run func(user *db_access.User)) *DbAccess_AddUser_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(*db_access.User))
+	})
+	return _c
+}
+
+func (_c *DbAccess_AddUser_Call) Return(_a0 error) *DbAccess_AddUser_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *DbAccess_AddUser_Call) RunAndReturn(run func(*db_access.User) error) *DbAccess_AddUser_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetDEC provides a mock function with given fields: id
 func (_m *DbAccess) GetDEC(id db_access.DecId) (db_access.DEC, error) {
 	ret := _m.Called(id)
@@ -277,6 +323,52 @@ func (_c *DbAccess_GetNewestDEC_Call) Return(_a0 db_access.DEC, _a1 error) *DbAc
 }
 
 func (_c *DbAccess_GetNewestDEC_Call) RunAndReturn(run func() (db_access.DEC, error)) *DbAccess_GetNewestDEC_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetUser provides a mock function with given fields: user
+func (_m *DbAccess) GetUser(user *db_access.User) error {
+	ret := _m.Called(user)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUser")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*db_access.User) error); ok {
+		r0 = rf(user)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DbAccess_GetUser_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUser'
+type DbAccess_GetUser_Call struct {
+	*mock.Call
+}
+
+// GetUser is a helper method to define mock.On call
+//   - user *db_access.User
+func (_e *DbAccess_Expecter) GetUser(user interface{}) *DbAccess_GetUser_Call {
+	return &DbAccess_GetUser_Call{Call: _e.mock.On("GetUser", user)}
+}
+
+func (_c *DbAccess_GetUser_Call) Run(run func(user *db_access.User)) *DbAccess_GetUser_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(*db_access.User))
+	})
+	return _c
+}
+
+func (_c *DbAccess_GetUser_Call) Return(_a0 error) *DbAccess_GetUser_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *DbAccess_GetUser_Call) RunAndReturn(run func(*db_access.User) error) *DbAccess_GetUser_Call {
 	_c.Call.Return(run)
 	return _c
 }

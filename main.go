@@ -2,6 +2,7 @@ package main
 
 import (
 	"cloud-storage/api"
+	"cloud-storage/auth"
 	"cloud-storage/config"
 	"cloud-storage/db_access/sqlite"
 	"cloud-storage/encryption"
@@ -69,6 +70,8 @@ func main() {
 		time.Duration(appConfig.DecRotationPeriod),
 	)
 
+	authData := auth.NewAuthData(db, time.Duration(appConfig.TokenTimeToLive))
+
 	r := chi.NewRouter()
 
 	r.Route("/api", func(r chi.Router) {
@@ -76,8 +79,17 @@ func main() {
 		r.Use(slogext.Logger(log))
 		r.Use(middleware.Recoverer)
 
-		r.Post("/upload", api.FileUpload(db, appConfig.UploadConfig(), fileCrypter))
-		r.Get("/download", api.FileDownload(db, fileCrypter, appConfig.FileStoragePath))
+		r.Group(func(r chi.Router) {
+			r.Use(auth.Auth(authData))
+
+			r.Post("/upload", api.FileUpload(db, appConfig.UploadConfig(), fileCrypter))
+			r.Get("/download", api.FileDownload(db, fileCrypter, appConfig.FileStoragePath))
+		})
+
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", auth.Register(authData))
+			r.Post("/login", auth.Login(authData))
+		})
 	})
 
 	log.Info(
